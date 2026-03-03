@@ -1,0 +1,674 @@
+# 学校级智慧教育大数据综合系统（v1.1）
+
+**技术栈固定**：
+
+* 前端：Vue 3 + Vite + TypeScript + Vue Router + Pinia + Element Plus + ECharts + Axios
+* 后端：Spring Boot + MyBatis + MySQL + Swagger(OpenAPI) + JWT
+* 部署：本地运行（前端 `npm run dev`，后端 `mvn spring-boot:run`，MySQL 本地）
+
+---
+
+## 0. 项目定位与交付边界
+
+### 0.1 学校级目标
+
+面向全校维度（学院/专业/年级/班级/课程/教师/学生）提供：
+
+1. 总览看板（学校/学院/年级筛选）
+2. 统一对比分析（核心能力：多维度对比 + 分布 + 趋势）
+3. 学生成绩明细查询 + 学习趋势
+4. 选课看板 + 选课趋势预测（带误差指标与建议）
+5. 教师教学评价（可选 P1）
+6. 资源分配与招生分析（可选 P1）
+
+### 0.2 大数据闭环（轻量实现）
+
+* OLTP：原始业务明细表（成绩/选课/评价/招生…）
+* OLAP：汇总指标表（趋势/排行/分布/对比）
+* 汇总刷新策略：**导入后刷新**（P0），可加“定时刷新”（P1）
+
+> 说明：毕设不做在线 Spark，不做 Docker/K8s。通过“OLAP 汇总表 + 数据质量统计 + 预测页面”体现数据分析系统形态。
+
+---
+
+## 1. 全局统一规则（前后端共同遵守）
+
+### 1.1 维度与术语（Dimension）
+
+* school（学校，全局唯一）
+* college（学院）
+* major（专业）
+* grade（年级）
+* class（班级）
+* course（课程）
+* teacher（教师）
+* student（学生）
+* semester（学期，主时间单位）
+
+### 1.2 指标口径配置（Metric Config）
+
+由配置表统一控制（默认值）：
+
+* `passScore = 60`（及格线）
+* `excellentScore = 85`（优秀线）
+* `scoreBins = ["0-59","60-69","70-79","80-84","85-100"]`
+
+口径定义：
+
+* 平均分 avgScore：有效成绩记录（排除 null/未评分/异常值）
+* 及格率 passRate：score ≥ passScore 的比例
+* 优秀率 excellentRate：score ≥ excellentScore 的比例
+* 标准差 stdDev：按有效成绩
+
+前端要求：所有涉及优秀/及格的图表必须展示口径说明（tooltip 或 info icon）。
+后端要求：所有聚合接口必须基于同一 config 计算。
+
+### 1.3 权限（RBAC + DataScope）
+
+#### 角色 Roles
+
+* SYS_ADMIN：系统管理员（全校）
+* SCHOOL_ADMIN：校级管理员（全校）
+* COLLEGE_ADMIN：学院管理员（本学院）
+* TEACHER：教师（授课/班级范围）
+* STUDENT：学生（仅本人）
+
+#### DataScope 数据范围
+
+后端 `GET /api/auth/me` 返回：
+
+* `type`: `ALL | COLLEGE | TEACHING | SELF`
+* `collegeId`（COLLEGE 时固定）
+* `courseIds[]/classIds[]`（TEACHING 时固定）
+* `studentId`（SELF 时固定）
+
+前端：菜单+按钮可见性控制；筛选器默认值锁定；但**不负责最终过滤**。
+后端：所有接口必须校验 dataScope，保证越权不可拿到数据。
+
+### 1.4 API 统一规范
+
+#### Base
+
+* `/api`
+
+#### 返回格式
+
+```json
+{ "code": 0, "message": "ok", "data": {} }
+```
+
+#### 分页（OLTP 明细类）
+
+请求：
+
+* `page`（从 1 开始）
+* `size`（默认 20）
+* `sort`（例如 `score,desc`）
+
+响应：
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "size": 20,
+  "total": 1234
+}
+```
+
+#### ID 多选
+
+* 统一用 `ids=1,2,3`
+
+---
+
+## 2. 模块、页面与核心组件（前端必须照此实现）
+
+### 2.1 顶层导航（路由）
+
+1. 总览 `/overview`
+2. 学生学习
+
+* `/student/profile`
+* `/student/scores`
+* `/student/progress`
+
+3. 教师教学
+
+* `/teacher/profile`
+* `/teacher/performance`
+* `/teacher/evaluation`
+
+4. 课程优化
+
+* `/course/enroll-dashboard`
+* `/course/score-dashboard`
+* `/course/evaluation`
+* `/course/enroll-forecast`
+
+5. 教学资源
+
+* `/resource/course-allocation`
+* `/resource/teacher-allocation`
+* `/resource/admission-analysis`
+
+6. 系统管理
+
+* `/admin/users`
+* `/admin/metrics-config`
+* `/admin/data-import`
+* `/admin/audit`（可选）
+
+> 关键：班级对比/年级对比/课程对比不做多个页面，统一合并为下面的对比分析页。
+> 新增核心页：`/analysis/compare`（建议放在“学生学习”或单独一级菜单“分析中心”）
+
+### 2.2 必须做的通用组件（Vue 组件规范）
+
+1. `GlobalFilterBar`
+
+* 输入：启用哪些维度筛选（semester/college/major/grade/class/course/teacher）
+* 输出：`filters`（对象）
+* 行为：按 `dataScope` 限制可选项与默认值（例如 COLLEGE 锁定学院）
+
+2. `MetricCards`
+
+* 输入：数组（label, value, unit?, tooltip?）
+
+3. `ChartWrapper`
+
+* 输入：`option`（ECharts option）
+* 支持：loading/empty/resize
+
+4. `DataTable`
+
+* 输入：列定义、请求函数、分页状态
+* 支持：分页/排序/loading/空态
+
+5. `PermissionGuard`（指令或组件）
+
+* `v-perm="'analysis:compare'"`
+
+---
+
+## 3. 页面—接口—DTO 总契约（最重要）
+
+> 说明：后端必须按 DTO 返回；前端必须按 DTO 渲染。
+> 所有接口默认都受 dataScope 限制：如果传入的 collegeId/ids 超范围，后端可直接 403 或自动收敛到允许范围（二选一，建议 403 更清晰）。
+
+---
+
+# 3.1 鉴权与用户信息
+
+## POST /api/auth/login
+
+**Req DTO**
+
+```json
+{ "username": "admin", "password": "123456" }
+```
+
+**Resp DTO**
+
+```json
+{ "token": "jwt-token-string" }
+```
+
+## GET /api/auth/me
+
+**Resp DTO**
+
+```json
+{
+  "id": 1,
+  "name": "Admin",
+  "roles": ["SCHOOL_ADMIN"],
+  "permissions": ["dashboard:view","analysis:compare","prediction:view","admin:metrics:edit"],
+  "dataScope": {
+    "type": "ALL",
+    "collegeId": null,
+    "courseIds": [],
+    "classIds": [],
+    "studentId": null
+  }
+}
+```
+
+---
+
+# 3.2 字典接口（筛选器数据源）
+
+## GET /api/dict/semesters
+
+**Resp**
+
+```json
+[{ "id": 1, "name": "2024-Fall", "startDate": "2024-09-01", "endDate": "2025-01-15" }]
+```
+
+## GET /api/dict/colleges
+
+```json
+[{ "id": 10, "name": "计算机学院" }]
+```
+
+## GET /api/dict/majors?collegeId=
+
+```json
+[{ "id": 101, "collegeId": 10, "name": "计算机科学与技术" }]
+```
+
+## GET /api/dict/grades
+
+```json
+[{ "id": 2021, "name": "2021级" }]
+```
+
+## GET /api/dict/classes?gradeId=&majorId=
+
+```json
+[{ "id": 9001, "gradeId": 2021, "majorId": 101, "name": "计科1班" }]
+```
+
+## GET /api/dict/courses?semesterId=&collegeId=&majorId=
+
+```json
+[{ "id": 3001, "name": "数据结构", "collegeId": 10, "credit": 3 }]
+```
+
+---
+
+# 3.3 总览看板 /overview
+
+## GET /api/olap/overview/metrics?semesterId=&collegeId=&gradeId=
+
+**Resp DTO**
+
+```json
+{
+  "studentCount": 12000,
+  "teacherCount": 800,
+  "courseCount": 1200,
+  "enrollCount": 56000,
+  "avgScore": 78.2,
+  "passRate": 0.92,
+  "excellentRate": 0.31
+}
+```
+
+## GET /api/olap/overview/trends?metric=avgScore|passRate|excellentRate&collegeId=
+
+**Resp DTO**
+
+```json
+{
+  "x": ["2023-Fall","2024-Spring","2024-Fall"],
+  "y": [76.1, 77.9, 78.2]
+}
+```
+
+## GET /api/olap/overview/rankings?semesterId=&by=college|major&metric=avgScore&top=10
+
+**Resp DTO**
+
+```json
+[{ "id": 10, "name": "计算机学院", "value": 80.1 }]
+```
+
+## GET /api/olap/overview/data-quality?semesterId=
+
+**Resp DTO**
+
+```json
+{
+  "scoreNullRate": 0.01,
+  "absentRate": 0.02,
+  "duplicateRecordCount": 12
+}
+```
+
+---
+
+# 3.4 统一对比分析 /analysis/compare（核心）
+
+## GET /api/olap/compare
+
+**Query**
+
+* `dimension=COLLEGE|MAJOR|GRADE|CLASS|COURSE|TEACHER`
+* `ids=1,2,3`（最多 5 个）
+* `semesterId=`（可选：不传返回近 N 学期趋势）
+* 可选：`courseId=`（限制到某课程下的对比，按需求）
+* 可选：`metric=avgScore|passRate|excellentRate`（趋势图用）
+
+**Resp DTO**
+
+```json
+{
+  "metrics": [
+    { "id": 10, "name": "计算机学院", "avgScore": 80.1, "passRate": 0.95, "excellentRate": 0.35, "stdDev": 8.9, "count": 3200 }
+  ],
+  "distribution": {
+    "bins": ["0-59","60-69","70-79","80-84","85-100"],
+    "series": [
+      { "id": 10, "name": "计算机学院", "values": [0.03,0.10,0.28,0.24,0.35] }
+    ]
+  },
+  "trend": {
+    "x": ["2023-Fall","2024-Spring","2024-Fall"],
+    "series": [
+      { "id": 10, "name": "计算机学院", "values": [79.1,79.8,80.1] }
+    ]
+  }
+}
+```
+
+---
+
+# 3.5 学生成绩明细 /student/scores（OLTP）
+
+## GET /api/oltp/scores
+
+**Query**
+
+* `semesterId=&collegeId=&majorId=&gradeId=&classId=&courseId=`
+* `studentKey=`（姓名或学号模糊）
+* `scoreMin=&scoreMax=`
+* `page=&size=&sort=score,desc`
+
+**Resp DTO（分页）**
+
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "semesterId": 1,
+      "collegeId": 10,
+      "majorId": 101,
+      "gradeId": 2021,
+      "classId": 9001,
+      "studentId": 50001,
+      "studentNo": "S20210001",
+      "studentName": "张三",
+      "courseId": 3001,
+      "courseName": "数据结构",
+      "teacherId": 7001,
+      "teacherName": "李老师",
+      "score": 86,
+      "isAbsent": 0
+    }
+  ],
+  "page": 1,
+  "size": 20,
+  "total": 1234
+}
+```
+
+---
+
+# 3.6 学习趋势 /student/progress（OLAP）
+
+## GET /api/olap/student/{studentId}/trend
+
+**Resp DTO**
+
+```json
+{
+  "x": ["2023-Fall","2024-Spring","2024-Fall"],
+  "avgScore": [75.0, 78.2, 80.1],
+  "passRate": [0.9, 0.95, 1.0],
+  "excellentRate": [0.2, 0.3, 0.35]
+}
+```
+
+## GET /api/olap/student/group-trend?dimension=CLASS&id=9001&metric=avgScore
+
+**Resp DTO**
+
+```json
+{ "x": ["2023-Fall","2024-Spring"], "y": [76.3, 78.8] }
+```
+
+---
+
+# 3.7 课程优化：选课看板与预测
+
+## GET /api/olap/enroll/dashboard?semesterId=&collegeId=&majorId=
+
+**Resp DTO**
+
+```json
+{
+  "courseCount": 1200,
+  "openCourseCount": 980,
+  "enrollCount": 56000,
+  "hotCourses": [
+    { "courseId": 3001, "courseName": "数据结构", "teacherName": "李老师", "capacity": 200, "enroll": 198, "dropRate": 0.03 }
+  ],
+  "majorDistribution": [
+    { "id": 101, "name": "计科", "value": 12000 }
+  ],
+  "gradeDistribution": [
+    { "id": 2021, "name": "2021级", "value": 18000 }
+  ]
+}
+```
+
+## GET /api/predict/enroll?courseId=&horizon=1|2&model=MA|LR|ARIMA
+
+**Resp DTO**
+
+```json
+{
+  "history": [{ "x": "2023-Fall", "y": 120 }, { "x": "2024-Spring", "y": 135 }],
+  "forecast": [{ "x": "2024-Fall", "y": 148 }],
+  "metrics": { "mae": 8.2, "rmse": 10.5 },
+  "suggestionText": "建议下学期扩容15%-20%，或增加1个班次以满足需求。"
+}
+```
+
+---
+
+# 3.8 指标口径配置 /admin/metrics-config
+
+## GET /api/config/metric-thresholds
+
+**Resp**
+
+```json
+{
+  "passScore": 60,
+  "excellentScore": 85,
+  "bins": ["0-59","60-69","70-79","80-84","85-100"]
+}
+```
+
+## PUT /api/config/metric-thresholds
+
+**Req**
+
+```json
+{
+  "passScore": 60,
+  "excellentScore": 85,
+  "bins": ["0-59","60-69","70-79","80-84","85-100"]
+}
+```
+
+---
+
+# 3.9 数据导入任务 /admin/data-import（本地导入，P0可做简化）
+
+## POST /api/admin/import
+
+* form-data：`file`、`type`（SCORE|ENROLL|EVAL|ADMISSION）、可选 `semesterId`
+  **Resp**
+
+```json
+{ "taskId": 1001 }
+```
+
+## GET /api/admin/import/tasks?page=&size=
+
+**Resp（分页）**
+
+```json
+{
+  "items": [
+    { "taskId": 1001, "type": "SCORE", "status": "SUCCESS", "totalRows": 10000, "successRows": 9988, "failedRows": 12, "createdAt": "2026-03-02 10:00:00" }
+  ],
+  "page": 1,
+  "size": 20,
+  "total": 3
+}
+```
+
+## GET /api/admin/import/tasks/{taskId}
+
+**Resp**
+
+```json
+{
+  "taskId": 1001,
+  "status": "SUCCESS",
+  "summary": { "totalRows": 10000, "successRows": 9988, "failedRows": 12 },
+  "errors": [
+    { "rowNum": 52, "reason": "studentNo not found", "raw": "..." }
+  ]
+}
+```
+
+---
+
+# 4. 后端数据库（MySQL）设计要求（用于 MyBatis）
+
+> 这里是约束与必须存在的表类别，便于后端 agent 建表与写 mapper。
+> 你如果希望我再补“完整建表 SQL（DDL）”，我也可以直接给一份可执行脚本。
+
+## 4.1 必须的表类别
+
+### 维度表（dict）
+
+* `dim_semester`
+* `dim_college`
+* `dim_major`
+* `dim_grade`
+* `dim_class`
+* `dim_course`
+* `dim_teacher`
+* `dim_student`
+
+### OLTP 事实明细表（fact）
+
+* `fact_score`（成绩明细）
+* `fact_enroll`（选课明细）
+* `fact_evaluation`（评价明细，可选 P1）
+* `fact_admission`（招生明细，可选 P1）
+
+### OLAP 汇总表（agg / olap）
+
+* `olap_overview_metrics`（总览指标，按 semester + college + grade 聚合）
+* `olap_metric_trend`（趋势，按维度对象 + metric + semester）
+* `olap_distribution`（分布，按维度对象 + semester）
+* `olap_rankings`（排行，按 semester + by + metric）
+* `olap_enroll_dashboard`（选课看板汇总）
+
+### 系统与配置
+
+* `sys_user`、`sys_role`、`sys_user_role`、`sys_permission`、`sys_role_permission`
+* `sys_metric_config`（阈值与 bins）
+* `sys_import_task`、`sys_import_task_error`
+* `sys_audit_log`（可选）
+
+## 4.2 MyBatis 约束
+
+* 所有查询必须可拼接 dataScope 条件（WHERE 子句）
+* OLTP 查询必须支持分页（PageHelper 或手写 LIMIT/OFFSET）
+* Swagger 必须覆盖所有接口 DTO 与 Query 参数说明
+
+---
+
+# 5. 前端实现任务拆分（Vue Agent 直接照做）
+
+## 5.1 P0 顺序（必须） [已完成]
+
+1. 脚手架与基础设施：Axios 封装、Router、Pinia、Element Plus、ECharts Wrapper [已完成]
+2. 登录页 + token + me 拉取 + 权限路由守卫 [已完成]
+3. Layout：动态菜单（按 permissions/roles） [已完成]
+4. 字典 store：semesters/colleges/majors/grades/classes/courses（缓存+懒加载） [已完成]
+5. `/overview`（指标卡 + 趋势 + 排行 + 数据质量） [已完成]
+6. `/analysis/compare`（维度切换 + 多选对比对象 + 3 视图图表） [已完成]
+7. `/student/scores`（明细表分页查询 + 查询条件） [已完成]
+8. `/course/enroll-dashboard`（分布/热门课程/指标卡） [已完成]
+9. `/course/enroll-forecast`（历史 vs 预测 + MAE/RMSE + 建议卡片） [已完成]
+
+## 5.2 验收标准 [已完成]
+
+* 每页具备 loading/empty/error [已完成]
+* 筛选器按 dataScope 自动锁定 [已完成]
+* 图表 option 使用统一封装（避免每页重复初始化代码） [已完成]
+* 可截图展示：overview、compare、forecast 三页必须“美观可讲述” [已完成]
+
+---
+
+# 6. 后端实现任务拆分（SpringBoot+MyBatis Agent 直接照做）
+
+## 6.1 P0 顺序（必须） [已完成]
+
+1. MySQL schema（维度表+fact_score+必要 sys 表） [已完成]
+2. JWT 登录与 `me`（RBAC + dataScope） [已完成]
+3. dict 接口全实现 [已完成]
+4. OLTP：`GET /oltp/scores` 分页 + 过滤 [已完成]
+5. OLAP：overview metrics/trends/rankings/data-quality [已完成]
+6. OLAP：compare（metrics + distribution + trend） [已完成]
+7. enroll dashboard + predict enroll（预测可先写简单模型或 mock，后续完善） [已完成]
+8. metric thresholds config（GET/PUT） [已完成]
+9. import tasks（可先做 score/enroll 两种类型） [已完成]
+
+## 6.2 Swagger 要求 [已完成]
+
+* 每个 Controller 分组（tag）：Auth、Dict、OLTP、OLAP、Predict、Admin、Config [已完成]
+* DTO/VO 必须注释字段含义与单位（rate 是 0~1 还是 0~100 必须统一，建议 0~1） [已完成]
+
+---
+
+# 7. 统一“单位与格式”强制规则
+
+* rate 类（passRate/excellentRate/dropRate）统一用 **0~1 小数**，前端显示时 ×100%
+* 时间字符串建议：`YYYY-MM-DD HH:mm:ss`
+* 学期 name：`2024-Fall` / `2024-Spring`（dict 表统一）
+
+---
+
+## 8. P0 最小可交付范围（最终演示必须齐）
+
+* 登录 + RBAC + dataScope（能演示学院管理员只能看学院）
+* overview 看板完整
+* compare 对比完整（至少学院维度）
+* scores 明细分页完整
+* enroll dashboard 完整
+* enroll forecast 完整（至少一个模型输出 + MAE/RMSE + 建议文本）
+* metrics-config 能修改阈值并影响聚合结果（P0+，很加分）
+
+---
+*(以下为前端开发 Agent 添加的说明：)*
+**前端环境说明（给后端 Agent 查看）：**
+1. 前端（Vue 3 + Vite）已完成 P0 所有核心页面静态逻辑与组件组装（5.1及5.2）。
+2. 为了能够在后端完成前直接测试各页面 UI，前端临时在 `src/store/user.js` 中 mock 了登录和获取权限信息的逻辑，并在 `src/utils/request.js` 禁用了 401 自动跳转。同时在 `src/utils/request.js` 中拦截了所有 API 调用并返回了 Mock 数据。
+3. 前端严格按照文档第 3 节的 DTO 发起 Ajax 请求，请求基地址统一为 `/api`。在后续需要执行前后端联调时，请务必前往 `src/store/user.js` 以及 `src/utils/request.js` 将带有 `[后端未实现]` 注释的 mock 还原去除，恢复真实的 axios 调用逻辑并**删除所有 Mock 拦截数据**。
+
+---
+*(以下为后端开发 Agent 添加的说明：)*
+**后端联调交付说明（给前端 Agent 查看）：**
+
+后端 (Spring Boot + MyBatis) 的开发及 `init.sql` 数据初始化已全部完成，相关基础 API 服务已就绪！现在需要前端执行以下操作以进行真实数据联调：
+1. **清理 Mock 拦截器并恢复真实请求**：
+   - 请前往 `src/utils/request.js`，完全删除文件中所有为了临时测试而添加的拦截 API 的 Mock 数据代码（包括带有 `[后端未实现]` 注释的逻辑）。
+   - 在请求拦截器中，确保针对 `/api` 开头的请求正确的透传 JWT Token（例如置于 `Authorization: Bearer <token>` 请求头中）。
+   - 在响应拦截器中，恢复对于 HTTP 401 和 403 状态码的处理，确保能正确拦截并跳转到统一的 `/login` 登录页面。
+2. **恢复真实的用户状态与获取模式**：
+   - 请前往负责鉴权的 Pinia Store（比如 `src/store/user.js`），去除临时 Mock 的登录态以及写死的 `roles` / `permissions` / `dataScope` 信息。
+   - 确保 `login` Action 实际向后端的 `/api/auth/login` 发起请求，并在请求成功后存储返回的 Token 字符串。
+   - 确保 `getUserInfo` Action 实际调用 `/api/auth/me` 以换取当前登录人确切的角色(roles)、权限数组(permissions)以及数据域(dataScope)。
+3. **验证接口联调连通性**：
+   - 启动前端你的开发服务器，确保 `devServer` 代理（如 `vite.config.js` 中的 proxy）正确指向后端服务地址（默认 `http://localhost:8080`）。使用系统初始账号 `admin`/`123456` 进行登入，检查控制台 Network 报文格式是否对齐，确保所有列表与大屏看板脱离“模拟状态”读取到了数据库真实的数值！
