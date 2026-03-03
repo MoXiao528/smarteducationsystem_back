@@ -55,10 +55,11 @@ public class DictController {
     }
 
     @GetMapping("/courses")
-    @Operation(summary = "获取课程列表 (支持学期、学院过滤)")
+    @Operation(summary = "获取课程列表 (支持学期、学院、学生过滤)")
     public Result<List<DimCourse>> getCourses(@RequestParam(required = false) Integer semesterId,
                                               @RequestParam(required = false) Integer collegeId,
-                                              @RequestParam(required = false) Integer majorId) {
-        return Result.success(dictMapper.findCourses(semesterId, collegeId, majorId));
+                                              @RequestParam(required = false) Integer majorId,
+                                              @RequestParam(required = false) Integer studentId) {
+        return Result.success(dictMapper.findCourses(semesterId, collegeId, majorId, studentId));
     }
 }

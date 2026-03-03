@@ -9,9 +9,13 @@ public class ProfileDto {
     public static class StudentProfile {
         private String name;
         private String studentNo;
+        private Integer collegeId;
         private String collegeName;
+        private Integer majorId;
         private String majorName;
+        private Integer gradeId;
         private String gradeName;
+        private Integer classId;
         private String className;
     }
 

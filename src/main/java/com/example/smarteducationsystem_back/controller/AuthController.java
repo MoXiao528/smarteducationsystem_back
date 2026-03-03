@@ -2,7 +2,9 @@ package com.example.smarteducationsystem_back.controller;
 
 import com.example.smarteducationsystem_back.common.Result;
 import com.example.smarteducationsystem_back.dto.AuthDto;
+import com.example.smarteducationsystem_back.dto.ProfileDto;
 import com.example.smarteducationsystem_back.entity.SysUser;
+import com.example.smarteducationsystem_back.mapper.ProfileMapper;
 import com.example.smarteducationsystem_back.mapper.SysUserMapper;
 import com.example.smarteducationsystem_back.security.CheckRole;
 import com.example.smarteducationsystem_back.security.CurrentUser;
@@ -22,6 +24,9 @@ public class AuthController {
 
     @Autowired
     private SysUserMapper sysUserMapper;
+
+    @Autowired
+    private ProfileMapper profileMapper;
 
     @Autowired
     private JwtUtils jwtUtils;
@@ -77,6 +82,16 @@ public class AuthController {
             case "STUDENT":
                 scope.setType("SELF");
                 scope.setStudentId(user.getStudentId());
+                // 从 dim_student 查出 collegeId/majorId/gradeId/classId
+                if (user.getStudentId() != null) {
+                    ProfileDto.StudentProfile sp = profileMapper.getStudentProfile(user.getStudentId());
+                    if (sp != null) {
+                        scope.setCollegeId(sp.getCollegeId());
+                        scope.setMajorId(sp.getMajorId());
+                        scope.setGradeId(sp.getGradeId());
+                        scope.setClassId(sp.getClassId());
+                    }
+                }
                 break;
             default:
                 scope.setType("ALL");

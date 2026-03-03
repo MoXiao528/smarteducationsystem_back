@@ -29,6 +29,9 @@ public class AuthDto {
     public static class DataScope {
         private String type; // ALL | COLLEGE | TEACHING | SELF
         private Integer collegeId;
+        private Integer majorId;
+        private Integer gradeId;
+        private Integer classId;
         private List<Integer> courseIds;
         private List<Integer> classIds;
         private Integer studentId;

@@ -10,8 +10,11 @@ import java.util.List;
 @Mapper
 public interface ProfileMapper {
 
-    @Select("SELECT s.name, s.student_no as studentNo, c.name as collegeName, m.name as majorName, " +
-            "g.name as gradeName, cl.name as className " +
+    @Select("SELECT s.name, s.student_no as studentNo, " +
+            "s.college_id as collegeId, c.name as collegeName, " +
+            "s.major_id as majorId, m.name as majorName, " +
+            "s.grade_id as gradeId, g.name as gradeName, " +
+            "s.class_id as classId, cl.name as className " +
             "FROM dim_student s " +
             "LEFT JOIN dim_college c ON s.college_id = c.id " +
             "LEFT JOIN dim_major m ON s.major_id = m.id " +
@@ -30,8 +33,11 @@ public interface ProfileMapper {
     List<String> getTeacherCourses(@Param("teacherId") Integer teacherId);
 
     @Select("<script>" +
-            "SELECT s.id, s.name, s.student_no as studentNo, c.name as collegeName, " +
-            "m.name as majorName, g.name as gradeName, cl.name as className " +
+            "SELECT s.id, s.name, s.student_no as studentNo, " +
+            "s.college_id as collegeId, c.name as collegeName, " +
+            "s.major_id as majorId, m.name as majorName, " +
+            "s.grade_id as gradeId, g.name as gradeName, " +
+            "s.class_id as classId, cl.name as className " +
             "FROM dim_student s " +
             "LEFT JOIN dim_college c ON s.college_id = c.id " +
             "LEFT JOIN dim_major m ON s.major_id = m.id " +
