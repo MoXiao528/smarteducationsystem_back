@@ -29,7 +29,7 @@ public class ProfileController {
 
     @GetMapping("/student/profile")
     @Operation(summary = "获取当前学生基本信息")
-    @CheckRole("STUDENT")
+    @CheckRole({"STUDENT"})
     public Result<ProfileDto.StudentProfile> getStudentProfile() {
         Integer userId = CurrentUser.getUserId();
         SysUser user = sysUserMapper.findById(userId);
@@ -43,7 +43,7 @@ public class ProfileController {
 
     @GetMapping("/teacher/profile")
     @Operation(summary = "获取当前教师基本信息")
-    @CheckRole("TEACHER")
+    @CheckRole({"TEACHER"})
     public Result<ProfileDto.TeacherProfile> getTeacherProfile() {
         Integer userId = CurrentUser.getUserId();
         SysUser user = sysUserMapper.findById(userId);
@@ -53,11 +53,47 @@ public class ProfileController {
 
         ProfileDto.TeacherProfile profile = profileMapper.getTeacherProfile(user.getTeacherId());
         if (profile != null) {
-            // Mock teachingYears based on a simple logic or default value
-            profile.setTeachingYears(5); 
+            profile.setTeachingYears(5);
             List<String> courses = profileMapper.getTeacherCourses(user.getTeacherId());
             profile.setCourses(courses);
         }
         return Result.success(profile);
+    }
+
+    @GetMapping("/profile/students")
+    @Operation(summary = "获取学生列表 (带数据权限)")
+    @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN", "COLLEGE_ADMIN", "TEACHER"})
+    public Result<List<ProfileDto.StudentProfile>> getStudentList() {
+        Integer userId = CurrentUser.getUserId();
+        SysUser user = sysUserMapper.findById(userId);
+        
+        Integer filterCollegeId = null;
+        Integer filterTeacherId = null;
+
+        if ("COLLEGE_ADMIN".equals(user.getRoleType())) {
+            filterCollegeId = user.getCollegeId();
+        } else if ("TEACHER".equals(user.getRoleType())) {
+            filterTeacherId = user.getTeacherId();
+        }
+
+        List<ProfileDto.StudentProfile> list = profileMapper.getStudentList(filterCollegeId, filterTeacherId);
+        return Result.success(list);
+    }
+
+    @GetMapping("/profile/teachers")
+    @Operation(summary = "获取教师列表 (带数据权限)")
+    @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN", "COLLEGE_ADMIN"})
+    public Result<List<ProfileDto.TeacherProfile>> getTeacherList() {
+        Integer userId = CurrentUser.getUserId();
+        SysUser user = sysUserMapper.findById(userId);
+        
+        Integer filterCollegeId = null;
+
+        if ("COLLEGE_ADMIN".equals(user.getRoleType())) {
+            filterCollegeId = user.getCollegeId();
+        }
+
+        List<ProfileDto.TeacherProfile> list = profileMapper.getTeacherList(filterCollegeId);
+        return Result.success(list);
     }
 }

@@ -87,9 +87,13 @@ public interface OlapMapper {
             "  sm.name as semesterName, " +
             "  IFNULL(AVG(s.score), 0) as avgScore, " +
             "  IFNULL(SUM(CASE WHEN s.score &gt;= #{pass} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as passRate, " +
-            "  IFNULL(SUM(CASE WHEN s.score &gt;= #{exc} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as excellentRate " +
+            "  IFNULL(SUM(CASE WHEN s.score &gt;= #{exc} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as excellentRate, " +
+            "  COUNT(DISTINCT s.course_id) as courseCount, " +
+            "  IFNULL(SUM(c.credit), 0) as totalCredit, " +
+            "  SUM(CASE WHEN s.score &lt; #{pass} THEN 1 ELSE 0 END) as failCount " +
             "FROM fact_score s " +
             "JOIN dim_semester sm ON s.semester_id = sm.id " +
+            "JOIN dim_course c ON s.course_id = c.id " +
             "WHERE s.student_id = #{studentId} AND s.is_absent = 0 " +
             "GROUP BY s.semester_id, sm.name, sm.start_date " +
             "ORDER BY sm.start_date ASC " +

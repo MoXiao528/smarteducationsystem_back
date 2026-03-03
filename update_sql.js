@@ -15,11 +15,8 @@ try {
         return "INSERT INTO `dim_student` VALUES (" + id + ", '" + newSno + "', '" + name + "', " + college + ", " + major + ", " + grade + ", " + cls + ");";
     });
 
+    // Disabled the flawed teacher regex replace.
     // update teacher users usernames to their teacher_id
-    // INSERT INTO `sys_user` VALUES (3, 'teacher1', '123456', '教师1', 'TEACHER', 10, NULL, 7001);
-    txt = txt.replace(/INSERT INTO `sys_user` VALUES \((\d+), 'teacher\d+', '123456', '([^']+)', 'TEACHER', (\d+), NULL, (\d+)\);/g, (match, id, name, college, t_id) => {
-        return "INSERT INTO `sys_user` VALUES (" + id + ", '" + t_id + "', '123456', '" + name + "', 'TEACHER', " + college + ", NULL, " + t_id + ");";
-    });
 
     // mapping student no
     let snoMap = {};

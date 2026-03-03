@@ -14,6 +14,7 @@ public class ScoreDto {
         private Integer courseId;
         private String studentKey; // 姓名或学号模糊匹配
         private Integer studentId; // DataScope: 强制本人的studentId
+        private Integer teacherId; // DataScope: 强制本人的teacherId
         private Double scoreMin;
         private Double scoreMax;
         

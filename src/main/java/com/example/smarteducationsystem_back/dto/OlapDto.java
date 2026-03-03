@@ -89,5 +89,8 @@ public class OlapDto {
         private List<Double> avgScore;
         private List<Double> passRate;
         private List<Double> excellentRate;
+        private List<Integer> courseCount;
+        private List<Double> totalCredit;
+        private List<Integer> failCount;
     }
 }

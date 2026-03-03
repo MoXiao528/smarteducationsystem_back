@@ -36,10 +36,12 @@ public interface DictMapper {
     List<DimClass> findClasses(@Param("gradeId") Integer gradeId, @Param("majorId") Integer majorId);
 
     @Select("<script>" +
-            "SELECT * FROM dim_course " +
+            "SELECT DISTINCT c.* FROM dim_course c " +
+            "<if test='semesterId != null'> JOIN fact_score fs ON c.id = fs.course_id </if>" +
             "<where> " +
-            "<if test='collegeId != null'> AND college_id = #{collegeId} </if>" +
-            "</where> ORDER BY id ASC" +
+            "<if test='semesterId != null'> fs.semester_id = #{semesterId} </if>" +
+            "<if test='collegeId != null'> AND c.college_id = #{collegeId} </if>" +
+            "</where> ORDER BY c.id ASC" +
             "</script>")
     List<DimCourse> findCourses(@Param("semesterId") Integer semesterId, @Param("collegeId") Integer collegeId, @Param("majorId") Integer majorId);
     

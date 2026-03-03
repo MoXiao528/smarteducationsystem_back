@@ -35,13 +35,14 @@ public class AdminController {
 
     @GetMapping("/config/metric-thresholds")
     @Operation(summary = "获取指标统计的阈值配置 (口径)")
-    @CheckRole
+    @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN"})
     public Result<SysMetricConfig> getMetricConfig() {
         return Result.success(configMapper.getConfig());
     }
 
     @PutMapping("/config/metric-thresholds")
     @Operation(summary = "更新指标统计阈值 (口径)")
+    @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN"})
     public Result<Void> updateMetricConfig(@RequestBody SysMetricConfig config) {
         SysMetricConfig existing = configMapper.getConfig();
         if (existing == null) {
@@ -54,6 +55,7 @@ public class AdminController {
 
     @PostMapping("/admin/import")
     @Operation(summary = "上传数据文件进行批量导入分析")
+    @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN"})
     public Result<Map<String, Long>> importData(
             @RequestParam("file") MultipartFile file,
             @RequestParam("type") String type,
@@ -77,6 +79,7 @@ public class AdminController {
 
     @GetMapping("/admin/import/tasks")
     @Operation(summary = "获取导入任务历史列表(分页)")
+    @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN"})
     public Result<PageResult<SysImportTask>> getImportTasks(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "20") Integer size) {
@@ -93,6 +96,7 @@ public class AdminController {
 
     @GetMapping("/admin/import/tasks/{taskId}")
     @Operation(summary = "获取导入任务产生的详细错误明细")
+    @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN"})
     public Result<AdminDto.ImportTaskDetail> getImportTaskDetail(@PathVariable Long taskId) {
         SysImportTask task = importTaskMapper.findById(taskId);
         if (task == null) {

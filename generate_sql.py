@@ -275,7 +275,7 @@ CREATE TABLE `fact_score` (
 
 BEGIN;
 """
-    for i in range(1, 51):
+    for i in range(1, 1001):
         semester = random.randint(1, 15)
         student = random.choice(student_ids)
         course = random.choice(course_ids)
@@ -303,7 +303,7 @@ CREATE TABLE `fact_enroll` (
 
 BEGIN;
 """
-    for i in range(1, 31):
+    for i in range(1, 501):
         semester = random.randint(1, 15)
         student = random.choice(student_ids)
         course = random.choice(course_ids)

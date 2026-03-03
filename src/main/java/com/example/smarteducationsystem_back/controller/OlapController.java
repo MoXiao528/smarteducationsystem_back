@@ -6,6 +6,9 @@ import com.example.smarteducationsystem_back.entity.SysMetricConfig;
 import com.example.smarteducationsystem_back.mapper.OlapMapper;
 import com.example.smarteducationsystem_back.mapper.SysMetricConfigMapper;
 import com.example.smarteducationsystem_back.security.CheckRole;
+import com.example.smarteducationsystem_back.entity.SysUser;
+import com.example.smarteducationsystem_back.mapper.SysUserMapper;
+import com.example.smarteducationsystem_back.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +34,9 @@ public class OlapController {
     @Autowired
     private SysMetricConfigMapper configMapper;
 
+    @Autowired
+    private SysUserMapper sysUserMapper;
+
     private double round(double value) {
         return new BigDecimal(value).setScale(4, RoundingMode.HALF_UP).doubleValue();
     }
@@ -41,6 +47,13 @@ public class OlapController {
         SysMetricConfig config = configMapper.getConfig();
         Double pass = config != null ? config.getPassScore() : 60.0;
         Double exc = config != null ? config.getExcellentScore() : 85.0;
+
+        if ("COLLEGE_ADMIN".equals(CurrentUser.getRoleType())) {
+            SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+            if (user != null && user.getCollegeId() != null) {
+                req.setCollegeId(user.getCollegeId()); // Inject DataScope
+            }
+        }
 
         OlapDto.OverviewMetrics res = new OlapDto.OverviewMetrics();
         res.setStudentCount(olapMapper.countStudents(req));
@@ -68,6 +81,13 @@ public class OlapController {
         SysMetricConfig config = configMapper.getConfig();
         Double pass = config != null ? config.getPassScore() : 60.0;
         Double exc = config != null ? config.getExcellentScore() : 85.0;
+
+        if ("COLLEGE_ADMIN".equals(CurrentUser.getRoleType())) {
+            SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+            if (user != null && user.getCollegeId() != null) {
+                collegeId = user.getCollegeId(); // Inject DataScope
+            }
+        }
 
         List<Map<String, Object>> trendList = olapMapper.calcTrend(collegeId, pass, exc);
         OlapDto.TrendData data = new OlapDto.TrendData();
@@ -175,12 +195,18 @@ public class OlapController {
         trend.setAvgScore(new ArrayList<>());
         trend.setPassRate(new ArrayList<>());
         trend.setExcellentRate(new ArrayList<>());
+        trend.setCourseCount(new ArrayList<>());
+        trend.setTotalCredit(new ArrayList<>());
+        trend.setFailCount(new ArrayList<>());
 
         for (Map<String, Object> map : list) {
             trend.getX().add((String) map.get("semesterName"));
             trend.getAvgScore().add(round(((Number) map.get("avgScore")).doubleValue()));
             trend.getPassRate().add(round(((Number) map.get("passRate")).doubleValue()));
             trend.getExcellentRate().add(round(((Number) map.get("excellentRate")).doubleValue()));
+            trend.getCourseCount().add(((Number) map.get("courseCount")).intValue());
+            trend.getTotalCredit().add(round(((Number) map.get("totalCredit")).doubleValue()));
+            trend.getFailCount().add(((Number) map.get("failCount")).intValue());
         }
         return Result.success(trend);
     }
@@ -211,6 +237,9 @@ public class OlapController {
         return Result.success(trend);
     }
 
+    @Autowired
+    private com.example.smarteducationsystem_back.mapper.FactEnrollMapper factEnrollMapper;
+
     @GetMapping("/enroll/dashboard")
     @Operation(summary = "选课看板汇总")
     public Result<Map<String, Object>> getEnrollDashboard(
@@ -219,36 +248,24 @@ public class OlapController {
             @RequestParam(required = false) Integer majorId) {
         
         Map<String, Object> data = new HashMap<>();
-        data.put("courseCount", 120);
-        data.put("openCourseCount", 100);
-        data.put("enrollCount", 5600);
         
-        List<Map<String, Object>> hotCourses = new ArrayList<>();
-        Map<String, Object> hc1 = new HashMap<>();
-        hc1.put("courseId", 3001);
-        hc1.put("courseName", "数据结构");
-        hc1.put("teacherName", "李老师");
-        hc1.put("capacity", 200);
-        hc1.put("enroll", 198);
-        hc1.put("dropRate", 0.03);
-        hotCourses.add(hc1);
-        data.put("hotCourses", hotCourses);
+        // Use real DB queries instead of mock data
+        int courseCount = 0; // The original mock had 120, but there's no direct count of open courses without enrollments in fact_enroll unless we query dim_course. We'll use openCourseCount for both as a fallback or just use openCourseCount.
+        int openCourseCount = factEnrollMapper.countOpenCourses(semesterId, collegeId, majorId) != null ? factEnrollMapper.countOpenCourses(semesterId, collegeId, majorId) : 0;
+        int enrollCount = factEnrollMapper.countEnrolls(semesterId, collegeId, majorId) != null ? factEnrollMapper.countEnrolls(semesterId, collegeId, majorId) : 0;
         
-        List<Map<String, Object>> majorDist = new ArrayList<>();
-        Map<String, Object> md1 = new HashMap<>();
-        md1.put("id", 101);
-        md1.put("name", "计科");
-        md1.put("value", 1200);
-        majorDist.add(md1);
-        data.put("majorDistribution", majorDist);
+        data.put("courseCount", openCourseCount); // Fallback to openCourseCount
+        data.put("openCourseCount", openCourseCount);
+        data.put("enrollCount", enrollCount);
+        
+        List<Map<String, Object>> hotCourses = factEnrollMapper.calcHotCourses(semesterId, collegeId, majorId);
+        data.put("hotCourses", hotCourses != null ? hotCourses : new ArrayList<>());
+        
+        List<Map<String, Object>> majorDist = factEnrollMapper.calcMajorDistribution(semesterId, collegeId, majorId);
+        data.put("majorDistribution", majorDist != null ? majorDist : new ArrayList<>());
 
-        List<Map<String, Object>> gradeDist = new ArrayList<>();
-        Map<String, Object> gd1 = new HashMap<>();
-        gd1.put("id", 2021);
-        gd1.put("name", "2021级");
-        gd1.put("value", 800);
-        gradeDist.add(gd1);
-        data.put("gradeDistribution", gradeDist);
+        List<Map<String, Object>> gradeDist = factEnrollMapper.calcGradeDistribution(semesterId, collegeId, majorId);
+        data.put("gradeDistribution", gradeDist != null ? gradeDist : new ArrayList<>());
 
         return Result.success(data);
     }

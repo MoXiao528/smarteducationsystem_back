@@ -39,6 +39,7 @@ public interface FactScoreMapper {
             "   <if test='req.classId != null'> AND s.class_id = #{req.classId} </if>" +
             "   <if test='req.courseId != null'> AND s.course_id = #{req.courseId} </if>" +
             "   <if test='req.studentId != null'> AND s.student_id = #{req.studentId} </if>" +
+            "   <if test='req.teacherId != null'> AND s.teacher_id = #{req.teacherId} </if>" +
             "   <if test='req.studentKey != null and req.studentKey != \"\"'>" +
             "       AND (stu.name LIKE CONCAT('%', #{req.studentKey}, '%') OR stu.student_no LIKE CONCAT('%', #{req.studentKey}, '%')) " +
             "   </if>" +
@@ -47,4 +48,10 @@ public interface FactScoreMapper {
             "</where>" +
             "</script>")
     List<ScoreDto.Item> selectScores(@Param("req") ScoreDto.Req req);
+
+    @org.apache.ibatis.annotations.Update("UPDATE fact_score SET score = #{score}, is_absent = #{isAbsent} WHERE id = #{id}")
+    int updateScore(@Param("id") Long id, @Param("score") Double score, @Param("isAbsent") Integer isAbsent);
+
+    @Select("SELECT * FROM fact_score WHERE id = #{id}")
+    com.example.smarteducationsystem_back.entity.FactScore findById(@Param("id") Long id);
 }
