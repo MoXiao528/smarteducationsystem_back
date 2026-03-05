@@ -115,4 +115,102 @@ public interface OlapMapper {
             "ORDER BY sm.start_date ASC " +
             "</script>")
     List<Map<String, Object>> calcGroupTrend(@Param("dimension") String dimension, @Param("id") Integer id, @Param("pass") Double pass, @Param("exc") Double exc);
+
+    // ===== 教师群体对比 =====
+
+    @Select("SELECT " +
+            "  c.id as courseId, c.name as courseName, " +
+            "  COUNT(*) as studentCount, " +
+            "  IFNULL(AVG(s.score), 0) as avgScore, " +
+            "  IFNULL(SUM(CASE WHEN s.score >= #{pass} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as passRate, " +
+            "  IFNULL(SUM(CASE WHEN s.score >= #{exc} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as excellentRate " +
+            "FROM fact_score s " +
+            "JOIN dim_course c ON s.course_id = c.id " +
+            "WHERE s.teacher_id = #{teacherId} AND s.is_absent = 0 " +
+            "GROUP BY c.id, c.name " +
+            "ORDER BY avgScore DESC")
+    List<Map<String, Object>> calcTeacherCourseMetrics(
+            @Param("teacherId") Integer teacherId,
+            @Param("pass") Double pass, @Param("exc") Double exc);
+
+    @Select("SELECT " +
+            "  cl.id as classId, cl.name as className, " +
+            "  COUNT(*) as studentCount, " +
+            "  IFNULL(AVG(s.score), 0) as avgScore, " +
+            "  IFNULL(SUM(CASE WHEN s.score >= #{pass} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as passRate, " +
+            "  IFNULL(SUM(CASE WHEN s.score >= #{exc} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as excellentRate " +
+            "FROM fact_score s " +
+            "JOIN dim_class cl ON s.class_id = cl.id " +
+            "WHERE s.teacher_id = #{teacherId} AND s.is_absent = 0 " +
+            "GROUP BY cl.id, cl.name " +
+            "ORDER BY avgScore DESC")
+    List<Map<String, Object>> calcTeacherClassMetrics(
+            @Param("teacherId") Integer teacherId,
+            @Param("pass") Double pass, @Param("exc") Double exc);
+
+    @Select("SELECT " +
+            "  sm.name as semesterName, " +
+            "  c.id as courseId, c.name as courseName, " +
+            "  IFNULL(AVG(s.score), 0) as avgScore, " +
+            "  IFNULL(SUM(CASE WHEN s.score >= #{pass} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as passRate, " +
+            "  IFNULL(SUM(CASE WHEN s.score >= #{exc} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as excellentRate " +
+            "FROM fact_score s " +
+            "JOIN dim_semester sm ON s.semester_id = sm.id " +
+            "JOIN dim_course c ON s.course_id = c.id " +
+            "WHERE s.teacher_id = #{teacherId} AND s.is_absent = 0 " +
+            "GROUP BY sm.id, sm.name, sm.start_date, c.id, c.name " +
+            "ORDER BY sm.start_date ASC, c.id")
+    List<Map<String, Object>> calcTeacherCourseTrend(
+            @Param("teacherId") Integer teacherId,
+            @Param("pass") Double pass, @Param("exc") Double exc);
+
+    @Select("<script>" +
+            "SELECT " +
+            "  IFNULL(SUM(CASE WHEN score IS NULL THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0) as scoreNullRate, " +
+            "  IFNULL(SUM(CASE WHEN is_absent = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 0) as absentRate, " +
+            "  (SELECT COUNT(*) FROM (SELECT student_id, course_id FROM fact_score " +
+            "   <where> <if test='semesterId != null'> semester_id = #{semesterId} </if> </where> " +
+            "   GROUP BY student_id, course_id HAVING COUNT(*) &gt; 1) t) as duplicateRecordCount " +
+            "FROM fact_score " +
+            "<where>" +
+            "   <if test='semesterId != null'> AND semester_id = #{semesterId} </if>" +
+            "</where>" +
+            "</script>")
+    OlapDto.DataQuality calcDataQuality(@Param("semesterId") Integer semesterId);
+
+    @Select("<script>" +
+            "SELECT " +
+            "  <choose>" +
+            "    <when test='by == \"college\"'> c.id, c.name </when>" +
+            "    <when test='by == \"major\"'> m.id, m.name </when>" +
+            "    <otherwise> c.id, c.name </otherwise>" +
+            "  </choose>" +
+            "  ," +
+            "  <choose>" +
+            "    <when test='metric == \"avgScore\"'> IFNULL(AVG(s.score), 0) as value </when>" +
+            "    <when test='metric == \"passRate\"'> IFNULL(SUM(CASE WHEN s.score &gt;= #{pass} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as value </when>" +
+            "    <when test='metric == \"excellentRate\"'> IFNULL(SUM(CASE WHEN s.score &gt;= #{exc} THEN 1 ELSE 0 END) / NULLIF(COUNT(s.score), 0), 0) as value </when>" +
+            "    <otherwise> IFNULL(AVG(s.score), 0) as value </otherwise>" +
+            "  </choose>" +
+            "FROM fact_score s " +
+            "  <choose>" +
+            "    <when test='by == \"college\"'> JOIN dim_college c ON s.college_id = c.id </when>" +
+            "    <when test='by == \"major\"'> JOIN dim_major m ON s.major_id = m.id </when>" +
+            "    <otherwise> JOIN dim_college c ON s.college_id = c.id </otherwise>" +
+            "  </choose>" +
+            "<where>" +
+            "   s.is_absent = 0 " +
+            "   <if test='semesterId != null'> AND s.semester_id = #{semesterId} </if>" +
+            "   <if test='gradeId != null'> AND s.grade_id = #{gradeId} </if>" +
+            "   <if test='collegeId != null and by == \"major\"'> AND s.college_id = #{collegeId} </if>" +
+            "</where>" +
+            "GROUP BY " +
+            "  <choose>" +
+            "    <when test='by == \"college\"'> c.id, c.name </when>" +
+            "    <when test='by == \"major\"'> m.id, m.name </when>" +
+            "    <otherwise> c.id, c.name </otherwise>" +
+            "  </choose> " +
+            "ORDER BY value DESC" +
+            "</script>")
+    List<OlapDto.RankingItem> calcRankings(@Param("semesterId") Integer semesterId, @Param("gradeId") Integer gradeId, @Param("collegeId") Integer collegeId, @Param("by") String by, @Param("metric") String metric, @Param("pass") Double pass, @Param("exc") Double exc);
 }

@@ -45,10 +45,21 @@ public interface ProfileMapper {
             "LEFT JOIN dim_class cl ON s.class_id = cl.id " +
             "<where> " +
             "   <if test='collegeId != null'> AND s.college_id = #{collegeId} </if>" +
+            "   <if test='majorId != null'> AND s.major_id = #{majorId} </if>" +
+            "   <if test='gradeId != null'> AND s.grade_id = #{gradeId} </if>" +
+            "   <if test='classId != null'> AND s.class_id = #{classId} </if>" +
             "   <if test='teacherId != null'> AND s.id IN (SELECT DISTINCT student_id FROM fact_enroll WHERE teacher_id = #{teacherId}) </if>" +
+            "   <if test='studentKey != null and studentKey != \"\"'> AND (s.name LIKE CONCAT('%', #{studentKey}, '%') OR s.student_no LIKE CONCAT('%', #{studentKey}, '%')) </if>" +
             "</where>" +
+            " ORDER BY s.id" +
             "</script>")
-    List<ProfileDto.StudentProfile> getStudentList(@Param("collegeId") Integer collegeId, @Param("teacherId") Integer teacherId);
+    List<ProfileDto.StudentProfile> getStudentList(
+            @Param("collegeId") Integer collegeId,
+            @Param("majorId") Integer majorId,
+            @Param("gradeId") Integer gradeId,
+            @Param("classId") Integer classId,
+            @Param("teacherId") Integer teacherId,
+            @Param("studentKey") String studentKey);
 
     @Select("<script>" +
             "SELECT t.id, t.name, t.title, c.name as collegeName " +

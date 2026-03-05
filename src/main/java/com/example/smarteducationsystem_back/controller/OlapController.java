@@ -111,26 +111,47 @@ public class OlapController {
     @GetMapping("/overview/rankings")
     @Operation(summary = "获取排行前N列表")
     public Result<List<OlapDto.RankingItem>> getOverviewRankings(@RequestParam(required = false) Integer semesterId,
+                                                                 @RequestParam(required = false) Integer gradeId,
+                                                                 @RequestParam(required = false) Integer collegeId,
                                                                  @RequestParam String by,
-                                                                 @RequestParam String metric,
-                                                                 @RequestParam(defaultValue = "10") Integer top) {
-        // [Demo演示实现] 因为需要多表动态JOIN，为了快速交付我们这里仅做 mock 或简单的返回体填充。
-        List<OlapDto.RankingItem> list = new ArrayList<>();
-        OlapDto.RankingItem item = new OlapDto.RankingItem();
-        item.setId(10);
-        item.setName(by.equals("college") ? "计算机学院" : "计算机科学与技术");
-        item.setValue(85.5);
-        list.add(item);
+                                                                 @RequestParam String metric) {
+        SysMetricConfig config = configMapper.getConfig();
+        Double pass = config != null ? config.getPassScore() : 60.0;
+        Double exc = config != null ? config.getExcellentScore() : 85.0;
+
+        Integer myCollegeId = null;
+        if ("COLLEGE_ADMIN".equals(CurrentUser.getRoleType())) {
+            SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+            if (user != null && user.getCollegeId() != null) {
+                myCollegeId = user.getCollegeId();
+                if ("major".equals(by)) {
+                    collegeId = myCollegeId; // 强制使用本学院的 collegeId
+                }
+            }
+        }
+
+        List<OlapDto.RankingItem> list = olapMapper.calcRankings(semesterId, gradeId, collegeId, by, metric, pass, exc);
+
+        if ("COLLEGE_ADMIN".equals(CurrentUser.getRoleType()) && "college".equals(by) && myCollegeId != null) {
+            for (OlapDto.RankingItem item : list) {
+                if (item.getId().equals(myCollegeId)) {
+                    item.setIsMyCollege(true);
+                }
+            }
+        }
         return Result.success(list);
     }
 
     @GetMapping("/overview/data-quality")
     @Operation(summary = "获取数据质量监控面板指标")
     public Result<OlapDto.DataQuality> getDataQuality(@RequestParam(required = false) Integer semesterId) {
-        OlapDto.DataQuality dq = new OlapDto.DataQuality();
-        dq.setScoreNullRate(0.02);
-        dq.setAbsentRate(0.015);
-        dq.setDuplicateRecordCount(3);
+        OlapDto.DataQuality dq = olapMapper.calcDataQuality(semesterId);
+        if (dq == null) {
+            dq = new OlapDto.DataQuality();
+            dq.setScoreNullRate(0.0);
+            dq.setAbsentRate(0.0);
+            dq.setDuplicateRecordCount(0);
+        }
         return Result.success(dq);
     }
 
@@ -268,5 +289,27 @@ public class OlapController {
         data.put("gradeDistribution", gradeDist != null ? gradeDist : new ArrayList<>());
 
         return Result.success(data);
+    }
+
+    @GetMapping("/teacher/overview")
+    @Operation(summary = "教师群体对比看板 — 我的课程/班级聚合指标 + 趋势")
+    @CheckRole({"TEACHER"})
+    public Result<OlapDto.TeacherOverview> getTeacherOverview() {
+        SysMetricConfig config = configMapper.getConfig();
+        Double pass = config != null ? config.getPassScore() : 60.0;
+        Double exc = config != null ? config.getExcellentScore() : 85.0;
+
+        SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+        if (user == null || user.getTeacherId() == null) {
+            return Result.error(400, "非教师或找不到对应的教师信息");
+        }
+        Integer teacherId = user.getTeacherId();
+
+        OlapDto.TeacherOverview overview = new OlapDto.TeacherOverview();
+        overview.setCourseMetrics(olapMapper.calcTeacherCourseMetrics(teacherId, pass, exc));
+        overview.setClassMetrics(olapMapper.calcTeacherClassMetrics(teacherId, pass, exc));
+        overview.setCourseTrend(olapMapper.calcTeacherCourseTrend(teacherId, pass, exc));
+
+        return Result.success(overview);
     }
 }

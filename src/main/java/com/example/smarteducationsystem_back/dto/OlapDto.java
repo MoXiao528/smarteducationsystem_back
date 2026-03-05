@@ -2,6 +2,7 @@ package com.example.smarteducationsystem_back.dto;
 
 import lombok.Data;
 import java.util.List;
+import java.util.Map;
 
 public class OlapDto {
 
@@ -37,6 +38,7 @@ public class OlapDto {
         private Integer id;
         private String name;
         private Double value;
+        private Boolean isMyCollege;
     }
 
     @Data
@@ -92,5 +94,15 @@ public class OlapDto {
         private List<Integer> courseCount;
         private List<Double> totalCredit;
         private List<Integer> failCount;
+    }
+
+    @Data
+    public static class TeacherOverview {
+        /** 按课程聚合: [{courseId, courseName, studentCount, avgScore, passRate, excellentRate}] */
+        private List<Map<String, Object>> courseMetrics;
+        /** 按班级聚合: [{classId, className, studentCount, avgScore, passRate, excellentRate}] */
+        private List<Map<String, Object>> classMetrics;
+        /** 按课程+学期的趋势(前端自行分组渲染多条线): [{semesterName, courseId, courseName, avgScore, passRate, excellentRate}] */
+        private List<Map<String, Object>> courseTrend;
     }
 }

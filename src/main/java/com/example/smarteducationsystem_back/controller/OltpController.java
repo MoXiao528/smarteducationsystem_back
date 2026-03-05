@@ -129,23 +129,72 @@ public class OltpController {
         Integer filterCollegeId = null;
         Integer filterTeacherId = null;
         Integer filterStudentId = null;
+        boolean onlyActive = false;
 
         if ("STUDENT".equals(CurrentUser.getRoleType())) {
             SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
             filterStudentId = user.getStudentId();
+            onlyActive = true;
         } else if ("TEACHER".equals(CurrentUser.getRoleType())) {
             SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
             filterTeacherId = user.getTeacherId();
+            onlyActive = true; // 教师只看已选中的学生
         } else if ("COLLEGE_ADMIN".equals(CurrentUser.getRoleType())) {
             SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
             filterCollegeId = user.getCollegeId();
+            // 管理员看全部(含退选)
         }
 
         PageHelper.startPage(page, size);
-        List<Map<String, Object>> list = factEnrollMapper.selectEnrolls(filterCollegeId, filterTeacherId, filterStudentId, courseId);
+        List<Map<String, Object>> list = factEnrollMapper.selectEnrolls(filterCollegeId, filterTeacherId, filterStudentId, courseId, onlyActive);
         Page<Map<String, Object>> pageInfo = (Page<Map<String, Object>>) list;
 
         return Result.success(new PageResult<>(list, pageInfo.getPageNum(), pageInfo.getPageSize(), pageInfo.getTotal()));
+    }
+
+    @PostMapping("/enrolls/drop")
+    @Operation(summary = "退选/恢复选课 (管理员)")
+    @CheckRole({"COLLEGE_ADMIN", "SCHOOL_ADMIN", "SUPER_ADMIN", "SYS_ADMIN"})
+    public Result<Void> enrollDrop(@org.springframework.web.bind.annotation.RequestBody Map<String, Object> body) {
+        Long id = ((Number) body.get("id")).longValue();
+        // isDrop: 1=退选, 0=恢复
+        Integer isDrop = body.get("isDrop") != null ? ((Number) body.get("isDrop")).intValue() : 1;
+
+        com.example.smarteducationsystem_back.entity.FactEnroll enroll = factEnrollMapper.findEnrollById(id);
+        if (enroll == null) {
+            return Result.error(404, "选课记录不存在");
+        }
+
+        // 院管理员只能操作本院的记录
+        if ("COLLEGE_ADMIN".equals(CurrentUser.getRoleType())) {
+            SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+            if (user.getCollegeId() != null && !user.getCollegeId().equals(enroll.getCollegeId())) {
+                return Result.error(403, "越权操作：只能操作本学院的选课记录");
+            }
+        }
+
+        int updated = factEnrollMapper.updateDrop(id, isDrop);
+        return updated > 0 ? Result.success() : Result.error(500, "操作失败");
+    }
+
+    @PostMapping("/enrolls/add")
+    @Operation(summary = "手动添加选课记录 (管理员)")
+    @CheckRole({"COLLEGE_ADMIN", "SCHOOL_ADMIN", "SUPER_ADMIN", "SYS_ADMIN"})
+    public Result<Void> enrollAdd(@org.springframework.web.bind.annotation.RequestBody com.example.smarteducationsystem_back.entity.FactEnroll enroll) {
+        if (enroll.getCourseId() == null || enroll.getStudentId() == null || enroll.getTeacherId() == null || enroll.getSemesterId() == null) {
+            return Result.error(400, "课程、学生、教师、学期为必填项");
+        }
+
+        // 院管理员只能添加本院的记录
+        if ("COLLEGE_ADMIN".equals(CurrentUser.getRoleType())) {
+            SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+            if (user.getCollegeId() != null && enroll.getCollegeId() != null && !user.getCollegeId().equals(enroll.getCollegeId())) {
+                return Result.error(403, "越权操作：只能添加本学院的选课记录");
+            }
+        }
+
+        int inserted = factEnrollMapper.insertEnroll(enroll);
+        return inserted > 0 ? Result.success() : Result.error(500, "添加失败");
     }
 
     @GetMapping("/courses")

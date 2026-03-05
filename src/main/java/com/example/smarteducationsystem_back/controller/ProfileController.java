@@ -1,5 +1,6 @@
 package com.example.smarteducationsystem_back.controller;
 
+import com.example.smarteducationsystem_back.common.PageResult;
 import com.example.smarteducationsystem_back.common.Result;
 import com.example.smarteducationsystem_back.dto.ProfileDto;
 import com.example.smarteducationsystem_back.entity.SysUser;
@@ -7,11 +8,14 @@ import com.example.smarteducationsystem_back.mapper.ProfileMapper;
 import com.example.smarteducationsystem_back.mapper.SysUserMapper;
 import com.example.smarteducationsystem_back.security.CheckRole;
 import com.example.smarteducationsystem_back.security.CurrentUser;
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -61,23 +65,34 @@ public class ProfileController {
     }
 
     @GetMapping("/profile/students")
-    @Operation(summary = "获取学生列表 (带数据权限)")
+    @Operation(summary = "获取学生列表 (带数据权限+筛选+分页)")
     @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN", "COLLEGE_ADMIN", "TEACHER"})
-    public Result<List<ProfileDto.StudentProfile>> getStudentList() {
+    public Result<PageResult<ProfileDto.StudentProfile>> getStudentList(
+            @RequestParam(required = false) Integer collegeId,
+            @RequestParam(required = false) Integer majorId,
+            @RequestParam(required = false) Integer gradeId,
+            @RequestParam(required = false) Integer classId,
+            @RequestParam(required = false) String studentKey,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size) {
+
         Integer userId = CurrentUser.getUserId();
         SysUser user = sysUserMapper.findById(userId);
-        
-        Integer filterCollegeId = null;
-        Integer filterTeacherId = null;
 
+        // DataScope: 强制隔离
+        Integer filterTeacherId = null;
         if ("COLLEGE_ADMIN".equals(user.getRoleType())) {
-            filterCollegeId = user.getCollegeId();
+            collegeId = user.getCollegeId();
         } else if ("TEACHER".equals(user.getRoleType())) {
             filterTeacherId = user.getTeacherId();
         }
 
-        List<ProfileDto.StudentProfile> list = profileMapper.getStudentList(filterCollegeId, filterTeacherId);
-        return Result.success(list);
+        PageHelper.startPage(page, size);
+        List<ProfileDto.StudentProfile> list = profileMapper.getStudentList(
+                collegeId, majorId, gradeId, classId, filterTeacherId, studentKey);
+        Page<ProfileDto.StudentProfile> pageInfo = (Page<ProfileDto.StudentProfile>) list;
+
+        return Result.success(new PageResult<>(list, pageInfo.getPageNum(), pageInfo.getPageSize(), pageInfo.getTotal()));
     }
 
     @GetMapping("/profile/teachers")
@@ -97,3 +112,4 @@ public class ProfileController {
         return Result.success(list);
     }
 }
+

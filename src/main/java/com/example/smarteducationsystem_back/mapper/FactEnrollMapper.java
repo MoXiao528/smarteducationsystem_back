@@ -1,8 +1,7 @@
 package com.example.smarteducationsystem_back.mapper;
 
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
+import com.example.smarteducationsystem_back.entity.FactEnroll;
+import org.apache.ibatis.annotations.*;
 
 import java.util.List;
 import java.util.Map;
@@ -13,7 +12,8 @@ public interface FactEnrollMapper {
     @Select("<script>" +
             "SELECT e.id, c.name as courseName, c.credit as courseCredit, " +
             "t.name as teacherName, s.name as studentName, s.student_no as studentNo, " +
-            "col.name as collegeName, m.name as majorName, g.name as gradeName " +
+            "col.name as collegeName, m.name as majorName, g.name as gradeName, " +
+            "CASE WHEN e.is_drop = 1 THEN 'DROPPED' ELSE 'ACTIVE' END as status " +
             "FROM fact_enroll e " +
             "JOIN dim_course c ON e.course_id = c.id " +
             "JOIN dim_teacher t ON e.teacher_id = t.id " +
@@ -26,12 +26,25 @@ public interface FactEnrollMapper {
             "   <if test='teacherId != null'> AND e.teacher_id = #{teacherId} </if>" +
             "   <if test='studentId != null'> AND e.student_id = #{studentId} </if>" +
             "   <if test='courseId != null'> AND e.course_id = #{courseId} </if>" +
+            "   <if test='onlyActive'> AND e.is_drop = 0 </if>" +
             "</where>" +
             "</script>")
-    List<Map<String, Object>> selectEnrolls(@Param("collegeId") Integer collegeId, 
-                                            @Param("teacherId") Integer teacherId, 
+    List<Map<String, Object>> selectEnrolls(@Param("collegeId") Integer collegeId,
+                                            @Param("teacherId") Integer teacherId,
                                             @Param("studentId") Integer studentId,
-                                            @Param("courseId") Integer courseId);
+                                            @Param("courseId") Integer courseId,
+                                            @Param("onlyActive") boolean onlyActive);
+
+    @Select("SELECT * FROM fact_enroll WHERE id = #{id}")
+    FactEnroll findEnrollById(@Param("id") Long id);
+
+    @Update("UPDATE fact_enroll SET is_drop = #{isDrop} WHERE id = #{id}")
+    int updateDrop(@Param("id") Long id, @Param("isDrop") Integer isDrop);
+
+    @Insert("INSERT INTO fact_enroll (semester_id, course_id, teacher_id, student_id, college_id, major_id, grade_id, is_drop) " +
+            "VALUES (#{semesterId}, #{courseId}, #{teacherId}, #{studentId}, #{collegeId}, #{majorId}, #{gradeId}, 0)")
+    @Options(useGeneratedKeys = true, keyProperty = "id")
+    int insertEnroll(FactEnroll enroll);
 
     @Select("<script>" +
             "SELECT c.id, c.name, c.credit, col.name as collegeName, " +
