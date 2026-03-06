@@ -41,8 +41,57 @@ public class OlapController {
         return new BigDecimal(value).setScale(4, RoundingMode.HALF_UP).doubleValue();
     }
 
+    private Integer[] resolveSemesterRange(Integer semesterId, Integer startSemesterId, Integer endSemesterId) {
+        Integer start = startSemesterId != null ? startSemesterId : semesterId;
+        Integer end = endSemesterId != null ? endSemesterId : semesterId;
+        if (start != null && end != null && start > end) {
+            Integer tmp = start;
+            start = end;
+            end = tmp;
+        }
+        return new Integer[]{start, end};
+    }
+    private OlapDto.StudentRankingItem buildStudentRankingItem(String dimension,
+                                                               List<OlapDto.StudentAvgItem> studentAvgList,
+                                                               Integer studentId) {
+        OlapDto.StudentRankingItem item = new OlapDto.StudentRankingItem();
+        item.setDimension(dimension);
+
+        if (studentId == null || studentAvgList == null || studentAvgList.isEmpty()) {
+            item.setTotal(0);
+            return item;
+        }
+
+        List<OlapDto.StudentAvgItem> sorted = new ArrayList<>(studentAvgList);
+        sorted.sort((a, b) -> {
+            double aScore = a.getAvgScore() == null ? 0.0 : a.getAvgScore();
+            double bScore = b.getAvgScore() == null ? 0.0 : b.getAvgScore();
+            int cmp = Double.compare(bScore, aScore);
+            if (cmp != 0) {
+                return cmp;
+            }
+            Integer aId = a.getStudentId() == null ? Integer.MAX_VALUE : a.getStudentId();
+            Integer bId = b.getStudentId() == null ? Integer.MAX_VALUE : b.getStudentId();
+            return Integer.compare(aId, bId);
+        });
+
+        item.setTotal(sorted.size());
+        for (int i = 0; i < sorted.size(); i++) {
+            OlapDto.StudentAvgItem row = sorted.get(i);
+            if (studentId.equals(row.getStudentId())) {
+                int rank = i + 1;
+                item.setRank(rank);
+                item.setAvgScore(round(row.getAvgScore() == null ? 0.0 : row.getAvgScore()));
+                item.setTopPercent(round(rank * 100.0 / sorted.size()));
+                break;
+            }
+        }
+
+        return item;
+    }
+
     @GetMapping("/overview/metrics")
-    @Operation(summary = "获取总览核心指标卡数据")
+    @Operation(summary = "Get overview metrics")
     public Result<OlapDto.OverviewMetrics> getOverviewMetrics(OlapDto.Req req) {
         SysMetricConfig config = configMapper.getConfig();
         Double pass = config != null ? config.getPassScore() : 60.0;
@@ -76,7 +125,7 @@ public class OlapController {
     }
 
     @GetMapping("/overview/trends")
-    @Operation(summary = "获取全校/指定院系的趋势指标分析")
+    @Operation(summary = "Get overview trends")
     public Result<OlapDto.TrendData> getOverviewTrends(@RequestParam String metric, @RequestParam(required = false) Integer collegeId) {
         SysMetricConfig config = configMapper.getConfig();
         Double pass = config != null ? config.getPassScore() : 60.0;
@@ -109,7 +158,7 @@ public class OlapController {
     }
 
     @GetMapping("/overview/rankings")
-    @Operation(summary = "获取排行前N列表")
+    @Operation(summary = "Get overview rankings")
     public Result<List<OlapDto.RankingItem>> getOverviewRankings(@RequestParam(required = false) Integer semesterId,
                                                                  @RequestParam(required = false) Integer gradeId,
                                                                  @RequestParam(required = false) Integer collegeId,
@@ -143,7 +192,7 @@ public class OlapController {
     }
 
     @GetMapping("/overview/data-quality")
-    @Operation(summary = "获取数据质量监控面板指标")
+    @Operation(summary = "Get data quality metrics")
     public Result<OlapDto.DataQuality> getDataQuality(@RequestParam(required = false) Integer semesterId) {
         OlapDto.DataQuality dq = olapMapper.calcDataQuality(semesterId);
         if (dq == null) {
@@ -156,7 +205,7 @@ public class OlapController {
     }
 
     @GetMapping("/compare")
-    @Operation(summary = "多维度统一对比分析")
+    @Operation(summary = "Unified compare analysis")
     public Result<OlapDto.CompareData> getCompare(
             @RequestParam String dimension,
             @RequestParam List<Integer> ids,
@@ -164,52 +213,132 @@ public class OlapController {
             @RequestParam(required = false) Integer courseId,
             @RequestParam(required = false, defaultValue = "avgScore") String metric) {
         
-        OlapDto.CompareData data = new OlapDto.CompareData();
-        
-        // Mock Metrics
-        List<OlapDto.CompareMetricItem> metrics = new ArrayList<>();
-        OlapDto.CompareMetricItem m1 = new OlapDto.CompareMetricItem();
-        m1.setId(ids.isEmpty() ? 1 : ids.get(0));
-        m1.setName("对比对象A");
-        m1.setAvgScore(80.5);
-        m1.setPassRate(0.92);
-        m1.setExcellentRate(0.35);
-        m1.setStdDev(8.9);
-        m1.setCount(120);
-        metrics.add(m1);
-        data.setMetrics(metrics);
-
-        // Mock Distribution
-        OlapDto.CompareDistribution dist = new OlapDto.CompareDistribution();
-        dist.setBins(Arrays.asList("0-59", "60-69", "70-79", "80-84", "85-100"));
-        OlapDto.CompareSeries s1 = new OlapDto.CompareSeries();
-        s1.setId(m1.getId());
-        s1.setName(m1.getName());
-        s1.setValues(Arrays.asList(0.05, 0.15, 0.30, 0.20, 0.30));
-        dist.setSeries(Arrays.asList(s1));
-        data.setDistribution(dist);
-
-        // Mock Trend
-        OlapDto.CompareTrend trend = new OlapDto.CompareTrend();
-        trend.setX(Arrays.asList("2023-Fall", "2024-Spring", "2024-Fall"));
-        OlapDto.CompareSeries t1 = new OlapDto.CompareSeries();
-        t1.setId(m1.getId());
-        t1.setName(m1.getName());
-        t1.setValues(Arrays.asList(78.5, 79.2, 80.5));
-        trend.setSeries(Arrays.asList(t1));
-        data.setTrend(trend);
-
-        return Result.success(data);
-    }
-
-    @GetMapping("/student/{studentId}/trend")
-    @Operation(summary = "学生个人成绩趋势")
-    public Result<OlapDto.StudentTrend> getStudentTrend(@PathVariable Integer studentId) {
         SysMetricConfig config = configMapper.getConfig();
         Double pass = config != null ? config.getPassScore() : 60.0;
         Double exc = config != null ? config.getExcellentScore() : 85.0;
 
-        List<Map<String, Object>> list = olapMapper.calcStudentTrend(studentId, pass, exc);
+        OlapDto.CompareData data = new OlapDto.CompareData();
+
+        if (ids == null || ids.isEmpty()) {
+            return Result.success(data);
+        }
+
+        // Metrics
+        List<OlapDto.CompareMetricItem> metrics = olapMapper.calcCompareMetrics(dimension, ids, semesterId, courseId, pass, exc);
+        data.setMetrics(metrics);
+
+        // Distribution
+        List<Map<String, Object>> distList = olapMapper.calcCompareDistribution(dimension, ids, semesterId, courseId);
+        OlapDto.CompareDistribution dist = new OlapDto.CompareDistribution();
+        dist.setBins(Arrays.asList("0-59", "60-69", "70-79", "80-89", "90-100"));
+        List<OlapDto.CompareSeries> distSeriesList = new ArrayList<>();
+        
+        // Match names to ids for series data
+        Map<Integer, String> idNameMap = new HashMap<>();
+        for (OlapDto.CompareMetricItem item : metrics) {
+            idNameMap.put(item.getId(), item.getName());
+        }
+
+        for (Map<String, Object> map : distList) {
+            Integer id = ((Number) map.get("id")).intValue();
+            String name = idNameMap.getOrDefault(id, "未知");
+            
+            OlapDto.CompareSeries series = new OlapDto.CompareSeries();
+            series.setId(id);
+            series.setName(name);
+            
+            long total = ((Number) map.get("total")).longValue();
+            if (total == 0) {
+                 series.setValues(Arrays.asList(0.0, 0.0, 0.0, 0.0, 0.0));
+            } else {
+                 series.setValues(Arrays.asList(
+                     round(((Number) map.get("bin1")).doubleValue() / total),
+                     round(((Number) map.get("bin2")).doubleValue() / total),
+                     round(((Number) map.get("bin3")).doubleValue() / total),
+                     round(((Number) map.get("bin4")).doubleValue() / total),
+                     round(((Number) map.get("bin5")).doubleValue() / total)
+                 ));
+            }
+            distSeriesList.add(series);
+        }
+        dist.setSeries(distSeriesList);
+        data.setDistribution(dist);
+
+        // Trend
+        List<Map<String, Object>> trendList = olapMapper.calcCompareTrend(dimension, ids, courseId, metric, pass, exc);
+        OlapDto.CompareTrend trend = new OlapDto.CompareTrend();
+        
+        List<String> xValues = new ArrayList<>();
+        Map<Integer, List<Double>> seriesDataMap = new HashMap<>();
+        
+        for (Integer id : ids) {
+            seriesDataMap.put(id, new ArrayList<>());
+        }
+
+        for (Map<String, Object> map : trendList) {
+            String xName = (String) map.get("semesterName");
+            if (!xValues.contains(xName)) {
+                xValues.add(xName);
+            }
+        }
+        
+        // Fill data, 0 for missing
+        for (String x : xValues) {
+             for (Integer id : ids) {
+                 boolean found = false;
+                 for (Map<String, Object> map : trendList) {
+                     if (id.equals(((Number) map.get("id")).intValue()) && x.equals(map.get("semesterName"))) {
+                         seriesDataMap.get(id).add(round(((Number) map.get("value")).doubleValue()));
+                         found = true;
+                         break;
+                     }
+                 }
+                 if (!found) {
+                     seriesDataMap.get(id).add(0.0);
+                 }
+             }
+        }
+
+        trend.setX(xValues);
+        List<OlapDto.CompareSeries> trendSeriesList = new ArrayList<>();
+        for (Integer id : ids) {
+            OlapDto.CompareSeries series = new OlapDto.CompareSeries();
+            series.setId(id);
+            series.setName(idNameMap.getOrDefault(id, "未知"));
+            series.setValues(seriesDataMap.get(id));
+            trendSeriesList.add(series);
+        }
+        trend.setSeries(trendSeriesList);
+        data.setTrend(trend);
+
+        if ("STUDENT".equals(CurrentUser.getRoleType())) {
+            SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+            if (user != null && user.getStudentId() != null) {
+                OlapDto.StudentRankingSummary summary = new OlapDto.StudentRankingSummary();
+                summary.setClassRanking(buildStudentRankingItem("CLASS",
+                        olapMapper.listClassStudentAveragesForStudent(user.getStudentId(), semesterId, semesterId, courseId),
+                        user.getStudentId()));
+                summary.setGradeRanking(buildStudentRankingItem("GRADE",
+                        olapMapper.listGradeStudentAveragesForStudent(user.getStudentId(), semesterId, semesterId, courseId),
+                        user.getStudentId()));
+                data.setStudentRankings(summary);
+            }
+        }
+        return Result.success(data);
+    }
+
+    @GetMapping("/student/{studentId}/trend")
+    @Operation(summary = "Get student personal trend")
+    public Result<OlapDto.StudentTrend> getStudentTrend(@PathVariable Integer studentId,
+                                                        @RequestParam(required = false) Integer semesterId,
+                                                        @RequestParam(required = false) Integer startSemesterId,
+                                                        @RequestParam(required = false) Integer endSemesterId) {
+        SysMetricConfig config = configMapper.getConfig();
+        Double pass = config != null ? config.getPassScore() : 60.0;
+        Double exc = config != null ? config.getExcellentScore() : 85.0;
+
+        Integer[] range = resolveSemesterRange(semesterId, startSemesterId, endSemesterId);
+        List<Map<String, Object>> list = olapMapper.calcStudentTrend(studentId, range[0], range[1], pass, exc);
         
         OlapDto.StudentTrend trend = new OlapDto.StudentTrend();
         trend.setX(new ArrayList<>());
@@ -233,13 +362,19 @@ public class OlapController {
     }
 
     @GetMapping("/student/group-trend")
-    @Operation(summary = "群体趋势分析")
-    public Result<OlapDto.TrendData> getGroupTrend(@RequestParam String dimension, @RequestParam Integer id, @RequestParam String metric) {
+    @Operation(summary = "Get group trend")
+    public Result<OlapDto.TrendData> getGroupTrend(@RequestParam String dimension,
+                                                   @RequestParam Integer id,
+                                                   @RequestParam String metric,
+                                                   @RequestParam(required = false) Integer semesterId,
+                                                   @RequestParam(required = false) Integer startSemesterId,
+                                                   @RequestParam(required = false) Integer endSemesterId) {
         SysMetricConfig config = configMapper.getConfig();
         Double pass = config != null ? config.getPassScore() : 60.0;
         Double exc = config != null ? config.getExcellentScore() : 85.0;
 
-        List<Map<String, Object>> list = olapMapper.calcGroupTrend(dimension, id, pass, exc);
+        Integer[] range = resolveSemesterRange(semesterId, startSemesterId, endSemesterId);
+        List<Map<String, Object>> list = olapMapper.calcGroupTrend(dimension, id, range[0], range[1], pass, exc);
 
         OlapDto.TrendData trend = new OlapDto.TrendData();
         trend.setX(new ArrayList<>());
@@ -255,6 +390,21 @@ public class OlapController {
             }
             trend.getY().add(round(val));
         }
+        // ===== 新增：为学生角色计算班级/年级排名 =====
+        if ("STUDENT".equals(CurrentUser.getRoleType())) {
+            SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+            if (user != null && user.getStudentId() != null) {
+                OlapDto.StudentRankingSummary summary = new OlapDto.StudentRankingSummary();
+                summary.setClassRanking(buildStudentRankingItem("CLASS",
+                        olapMapper.listClassStudentAveragesForStudent(user.getStudentId(), range[0], range[1], null),
+                        user.getStudentId()));
+                summary.setGradeRanking(buildStudentRankingItem("GRADE",
+                        olapMapper.listGradeStudentAveragesForStudent(user.getStudentId(), range[0], range[1], null),
+                        user.getStudentId()));
+                trend.setStudentRankings(summary);
+            }
+        }
+        // ===== 新增结束 =====
         return Result.success(trend);
     }
 
@@ -262,7 +412,7 @@ public class OlapController {
     private com.example.smarteducationsystem_back.mapper.FactEnrollMapper factEnrollMapper;
 
     @GetMapping("/enroll/dashboard")
-    @Operation(summary = "选课看板汇总")
+    @Operation(summary = "Get enroll dashboard")
     public Result<Map<String, Object>> getEnrollDashboard(
             @RequestParam(required = false) Integer semesterId,
             @RequestParam(required = false) Integer collegeId,
@@ -292,24 +442,54 @@ public class OlapController {
     }
 
     @GetMapping("/teacher/overview")
-    @Operation(summary = "教师群体对比看板 — 我的课程/班级聚合指标 + 趋势")
-    @CheckRole({"TEACHER"})
-    public Result<OlapDto.TeacherOverview> getTeacherOverview() {
+    @Operation(summary = "Get teacher overview dashboard")
+    @CheckRole({"TEACHER", "COLLEGE_ADMIN"})
+    public Result<OlapDto.TeacherOverview> getTeacherOverview(@RequestParam(required = false) Integer semesterId,
+                                                              @RequestParam(required = false) Integer startSemesterId,
+                                                              @RequestParam(required = false) Integer endSemesterId,
+                                                              @RequestParam(required = false) Integer majorId,
+                                                              @RequestParam(required = false) Integer gradeId) {
         SysMetricConfig config = configMapper.getConfig();
         Double pass = config != null ? config.getPassScore() : 60.0;
         Double exc = config != null ? config.getExcellentScore() : 85.0;
 
         SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
-        if (user == null || user.getTeacherId() == null) {
-            return Result.error(400, "非教师或找不到对应的教师信息");
+        if (user == null) {
+            return Result.error(400, "User not found");
         }
-        Integer teacherId = user.getTeacherId();
 
         OlapDto.TeacherOverview overview = new OlapDto.TeacherOverview();
-        overview.setCourseMetrics(olapMapper.calcTeacherCourseMetrics(teacherId, pass, exc));
-        overview.setClassMetrics(olapMapper.calcTeacherClassMetrics(teacherId, pass, exc));
-        overview.setCourseTrend(olapMapper.calcTeacherCourseTrend(teacherId, pass, exc));
+        Integer[] range = resolveSemesterRange(semesterId, startSemesterId, endSemesterId);
+        Integer start = range[0];
+        Integer end = range[1];
 
-        return Result.success(overview);
+        String roleType = user.getRoleType();
+        if ("TEACHER".equals(roleType)) {
+            if (user.getTeacherId() == null) {
+                return Result.error(400, "Teacher account missing teacherId");
+            }
+            Integer teacherId = user.getTeacherId();
+            overview.setCourseMetrics(olapMapper.calcTeacherCourseMetrics(teacherId, start, end, majorId, gradeId, pass, exc));
+            overview.setClassMetrics(olapMapper.calcTeacherClassMetrics(teacherId, start, end, majorId, gradeId, pass, exc));
+            overview.setCourseTrend(olapMapper.calcTeacherCourseTrend(teacherId, start, end, majorId, gradeId, pass, exc));
+            return Result.success(overview);
+        }
+
+        if ("COLLEGE_ADMIN".equals(roleType)) {
+            if (user.getCollegeId() == null) {
+                return Result.error(400, "College admin account missing collegeId");
+            }
+            Integer collegeId = user.getCollegeId();
+            overview.setCourseMetrics(olapMapper.calcCollegeCourseMetrics(collegeId, start, end, majorId, gradeId, pass, exc));
+            overview.setClassMetrics(olapMapper.calcCollegeClassMetrics(collegeId, start, end, majorId, gradeId, pass, exc));
+            overview.setCourseTrend(olapMapper.calcCollegeCourseTrend(collegeId, start, end, majorId, gradeId, pass, exc));
+            return Result.success(overview);
+        }
+
+        return Result.error(403, "Current role is not supported by group trend dashboard");
     }
 }
+
+
+
+

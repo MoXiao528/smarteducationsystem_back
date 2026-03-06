@@ -6,6 +6,9 @@ import com.example.smarteducationsystem_back.mapper.DictMapper;
 import com.example.smarteducationsystem_back.security.CheckRole;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import com.example.smarteducationsystem_back.entity.SysUser;
+import com.example.smarteducationsystem_back.security.CurrentUser;
+import com.example.smarteducationsystem_back.mapper.SysUserMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,6 +26,9 @@ public class DictController {
     @Autowired
     private DictMapper dictMapper;
 
+    @Autowired
+    private SysUserMapper sysUserMapper;
+
     @GetMapping("/semesters")
     @Operation(summary = "获取所有学期列表")
     public Result<List<DimSemester>> getSemesters() {
@@ -38,6 +44,12 @@ public class DictController {
     @GetMapping("/majors")
     @Operation(summary = "获取专业列表 (支持学院过滤)")
     public Result<List<DimMajor>> getMajors(@RequestParam(required = false) Integer collegeId) {
+        if ("COLLEGE_ADMIN".equals(CurrentUser.getRoleType())) {
+            SysUser user = sysUserMapper.findById(CurrentUser.getUserId());
+            if (user != null && user.getCollegeId() != null) {
+                collegeId = user.getCollegeId(); // 强制覆盖为本学院
+            }
+        }
         return Result.success(dictMapper.findMajors(collegeId));
     }
 

@@ -31,6 +31,7 @@ public class OlapDto {
     public static class TrendData {
         private List<String> x;
         private List<Double> y;
+        private StudentRankingSummary studentRankings;
     }
 
     @Data
@@ -53,6 +54,7 @@ public class OlapDto {
         private List<CompareMetricItem> metrics;
         private CompareDistribution distribution;
         private CompareTrend trend;
+        private StudentRankingSummary studentRankings;
     }
 
     @Data
@@ -97,12 +99,33 @@ public class OlapDto {
     }
 
     @Data
+    public static class StudentRankingSummary {
+        private StudentRankingItem classRanking;
+        private StudentRankingItem gradeRanking;
+    }
+
+    @Data
+    public static class StudentRankingItem {
+        private String dimension;
+        private Integer rank;
+        private Integer total;
+        private Double topPercent;
+        private Double avgScore;
+    }
+
+    @Data
+    public static class StudentAvgItem {
+        private Integer studentId;
+        private Double avgScore;
+    }
+    @Data
     public static class TeacherOverview {
-        /** 按课程聚合: [{courseId, courseName, studentCount, avgScore, passRate, excellentRate}] */
+        /** 按课程聚合 [{courseId, courseName, studentCount, avgScore, passRate, excellentRate}] */
         private List<Map<String, Object>> courseMetrics;
-        /** 按班级聚合: [{classId, className, studentCount, avgScore, passRate, excellentRate}] */
+        /** 按班级聚合 [{classId, className, studentCount, avgScore, passRate, excellentRate}] */
         private List<Map<String, Object>> classMetrics;
-        /** 按课程+学期的趋势(前端自行分组渲染多条线): [{semesterName, courseId, courseName, avgScore, passRate, excellentRate}] */
+        /** 按课程学期的趋势，前端自行分组渲染多条线：[{semesterName, courseId, courseName, avgScore, passRate, excellentRate}] */
         private List<Map<String, Object>> courseTrend;
     }
 }
+
