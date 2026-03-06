@@ -443,10 +443,11 @@ public class OlapController {
 
     @GetMapping("/teacher/overview")
     @Operation(summary = "Get teacher overview dashboard")
-    @CheckRole({"TEACHER", "COLLEGE_ADMIN"})
+    @CheckRole({"TEACHER", "COLLEGE_ADMIN", "SCHOOL_ADMIN"})
     public Result<OlapDto.TeacherOverview> getTeacherOverview(@RequestParam(required = false) Integer semesterId,
                                                               @RequestParam(required = false) Integer startSemesterId,
                                                               @RequestParam(required = false) Integer endSemesterId,
+                                                              @RequestParam(required = false) Integer collegeId,
                                                               @RequestParam(required = false) Integer majorId,
                                                               @RequestParam(required = false) Integer gradeId) {
         SysMetricConfig config = configMapper.getConfig();
@@ -479,7 +480,14 @@ public class OlapController {
             if (user.getCollegeId() == null) {
                 return Result.error(400, "College admin account missing collegeId");
             }
-            Integer collegeId = user.getCollegeId();
+            Integer scopedCollegeId = user.getCollegeId();
+            overview.setCourseMetrics(olapMapper.calcCollegeCourseMetrics(scopedCollegeId, start, end, majorId, gradeId, pass, exc));
+            overview.setClassMetrics(olapMapper.calcCollegeClassMetrics(scopedCollegeId, start, end, majorId, gradeId, pass, exc));
+            overview.setCourseTrend(olapMapper.calcCollegeCourseTrend(scopedCollegeId, start, end, majorId, gradeId, pass, exc));
+            return Result.success(overview);
+        }
+
+        if ("SCHOOL_ADMIN".equals(roleType)) {
             overview.setCourseMetrics(olapMapper.calcCollegeCourseMetrics(collegeId, start, end, majorId, gradeId, pass, exc));
             overview.setClassMetrics(olapMapper.calcCollegeClassMetrics(collegeId, start, end, majorId, gradeId, pass, exc));
             overview.setCourseTrend(olapMapper.calcCollegeCourseTrend(collegeId, start, end, majorId, gradeId, pass, exc));
