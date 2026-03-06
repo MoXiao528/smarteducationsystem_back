@@ -21,9 +21,11 @@ public class ProfileDto {
 
     @Data
     public static class TeacherProfile {
+        private String teacherNo;
         private String name;
         private Integer teachingYears;
         private String title;
+        private String collegeName;
         private List<String> courses;
     }
 }

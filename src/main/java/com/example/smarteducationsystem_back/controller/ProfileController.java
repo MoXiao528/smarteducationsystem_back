@@ -57,7 +57,6 @@ public class ProfileController {
 
         ProfileDto.TeacherProfile profile = profileMapper.getTeacherProfile(user.getTeacherId());
         if (profile != null) {
-            profile.setTeachingYears(5);
             List<String> courses = profileMapper.getTeacherCourses(user.getTeacherId());
             profile.setCourses(courses);
         }
@@ -98,18 +97,27 @@ public class ProfileController {
     @GetMapping("/profile/teachers")
     @Operation(summary = "获取教师列表 (带数据权限)")
     @CheckRole({"SYS_ADMIN", "SCHOOL_ADMIN", "COLLEGE_ADMIN"})
-    public Result<List<ProfileDto.TeacherProfile>> getTeacherList() {
+    public Result<PageResult<ProfileDto.TeacherProfile>> getTeacherList(
+            @RequestParam(required = false) Integer collegeId,
+            @RequestParam(required = false) String teacherKey,
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "20") Integer size) {
+            
         Integer userId = CurrentUser.getUserId();
         SysUser user = sysUserMapper.findById(userId);
         
-        Integer filterCollegeId = null;
+        Integer filterCollegeId = collegeId;
 
+        // 如果是学院管理员，强制使其只看本院
         if ("COLLEGE_ADMIN".equals(user.getRoleType())) {
             filterCollegeId = user.getCollegeId();
         }
 
-        List<ProfileDto.TeacherProfile> list = profileMapper.getTeacherList(filterCollegeId);
-        return Result.success(list);
+        PageHelper.startPage(page, size);
+        List<ProfileDto.TeacherProfile> list = profileMapper.getTeacherList(filterCollegeId, teacherKey);
+        Page<ProfileDto.TeacherProfile> pageInfo = (Page<ProfileDto.TeacherProfile>) list;
+
+        return Result.success(new PageResult<>(list, pageInfo.getPageNum(), pageInfo.getPageSize(), pageInfo.getTotal()));
     }
 }
 

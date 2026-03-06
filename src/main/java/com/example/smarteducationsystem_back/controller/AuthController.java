@@ -9,6 +9,8 @@ import com.example.smarteducationsystem_back.mapper.SysUserMapper;
 import com.example.smarteducationsystem_back.security.CheckRole;
 import com.example.smarteducationsystem_back.security.CurrentUser;
 import com.example.smarteducationsystem_back.security.JwtUtils;
+import com.example.smarteducationsystem_back.mapper.SysMetricConfigMapper;
+import com.example.smarteducationsystem_back.entity.SysMetricConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,12 +33,24 @@ public class AuthController {
     @Autowired
     private JwtUtils jwtUtils;
 
+    @Autowired
+    private SysMetricConfigMapper configMapper;
+
     @PostMapping("/login")
     @Operation(summary = "登录获取Token")
     public Result<AuthDto.LoginResp> login(@RequestBody AuthDto.LoginReq req) {
         SysUser user = sysUserMapper.findByUsername(req.getUsername());
         if (user == null || !user.getPassword().equals(req.getPassword())) {
             return Result.error(400, "用户名或密码错误");
+        }
+
+        // 维护模式拦截
+        SysMetricConfig config = configMapper.getConfig();
+        if (config != null && Boolean.TRUE.equals(config.getMaintenanceMode())) {
+            String role = user.getRoleType();
+            if (!"SCHOOL_ADMIN".equals(role)) {
+                return Result.error(503, "系统正在维护中，暂时无法登录。请联系管理员！");
+            }
         }
 
         String token = jwtUtils.generateToken(user.getId(), user.getUsername(), user.getRoleType());

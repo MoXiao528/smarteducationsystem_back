@@ -7,9 +7,12 @@ import org.apache.ibatis.annotations.Update;
 
 @Mapper
 public interface SysMetricConfigMapper {
-    @Select("SELECT * FROM sys_metric_config LIMIT 1")
+    @Select("SELECT id, pass_score, excellent_score, score_bins, maintenance_mode as maintenanceMode FROM sys_metric_config LIMIT 1")
     SysMetricConfig getConfig();
 
-    @Update("UPDATE sys_metric_config SET pass_score=#{passScore}, excellent_score=#{excellentScore}, score_bins=#{scoreBins} WHERE id=#{id}")
+    @Update("UPDATE sys_metric_config SET pass_score=#{passScore}, excellent_score=#{excellentScore}, score_bins=#{scoreBins}, maintenance_mode=#{maintenanceMode} WHERE id=#{id}")
     int updateConfig(SysMetricConfig config);
+
+    @org.apache.ibatis.annotations.Insert("INSERT INTO sys_metric_config (id, pass_score, excellent_score, score_bins, maintenance_mode) VALUES (#{id}, #{passScore}, #{excellentScore}, #{scoreBins}, #{maintenanceMode})")
+    int insertConfig(SysMetricConfig config);
 }

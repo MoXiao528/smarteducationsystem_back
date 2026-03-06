@@ -96,7 +96,7 @@ public interface OlapMapper {
             "JOIN dim_course c ON s.course_id = c.id " +
             "WHERE s.student_id = #{studentId} AND s.is_absent = 0 " +
             "  AND (#{startSemesterId} IS NULL OR s.semester_id >= #{startSemesterId}) " +
-            "  AND (#{endSemesterId} IS NULL OR s.semester_id <= #{endSemesterId}) " +
+            "  AND (#{endSemesterId} IS NULL OR s.semester_id &lt;= #{endSemesterId}) " +
             "GROUP BY s.semester_id, sm.name, sm.start_date " +
             "ORDER BY sm.start_date ASC " +
             "</script>")
@@ -112,7 +112,7 @@ public interface OlapMapper {
             "JOIN dim_semester sm ON s.semester_id = sm.id " +
             "WHERE s.is_absent = 0 " +
             "  AND (#{startSemesterId} IS NULL OR s.semester_id >= #{startSemesterId}) " +
-            "  AND (#{endSemesterId} IS NULL OR s.semester_id <= #{endSemesterId}) " +
+            "  AND (#{endSemesterId} IS NULL OR s.semester_id &lt;= #{endSemesterId}) " +
             "  <if test='dimension == \"CLASS\"'> AND s.class_id = #{id} </if>" +
             "  <if test='dimension == \"GRADE\"'> AND s.grade_id = #{id} </if>" +
             "GROUP BY s.semester_id, sm.name, sm.start_date " +
@@ -205,7 +205,7 @@ public interface OlapMapper {
             "  s.is_absent = 0 " +
             "  <if test='collegeId != null'> AND s.college_id = #{collegeId} </if>" +
             "  AND (#{startSemesterId} IS NULL OR s.semester_id >= #{startSemesterId}) " +
-            "  AND (#{endSemesterId} IS NULL OR s.semester_id <= #{endSemesterId}) " +
+            "  AND (#{endSemesterId} IS NULL OR s.semester_id &lt;= #{endSemesterId}) " +
             "  AND (#{majorId} IS NULL OR s.major_id = #{majorId}) " +
             "  AND (#{gradeId} IS NULL OR s.grade_id = #{gradeId}) " +
             "</where>" +
@@ -233,7 +233,7 @@ public interface OlapMapper {
             "  s.is_absent = 0 " +
             "  <if test='collegeId != null'> AND s.college_id = #{collegeId} </if>" +
             "  AND (#{startSemesterId} IS NULL OR s.semester_id >= #{startSemesterId}) " +
-            "  AND (#{endSemesterId} IS NULL OR s.semester_id <= #{endSemesterId}) " +
+            "  AND (#{endSemesterId} IS NULL OR s.semester_id &lt;= #{endSemesterId}) " +
             "  AND (#{majorId} IS NULL OR s.major_id = #{majorId}) " +
             "  AND (#{gradeId} IS NULL OR s.grade_id = #{gradeId}) " +
             "</where>" +
@@ -262,7 +262,7 @@ public interface OlapMapper {
             "  s.is_absent = 0 " +
             "  <if test='collegeId != null'> AND s.college_id = #{collegeId} </if>" +
             "  AND (#{startSemesterId} IS NULL OR s.semester_id >= #{startSemesterId}) " +
-            "  AND (#{endSemesterId} IS NULL OR s.semester_id <= #{endSemesterId}) " +
+            "  AND (#{endSemesterId} IS NULL OR s.semester_id &lt;= #{endSemesterId}) " +
             "  AND (#{majorId} IS NULL OR s.major_id = #{majorId}) " +
             "  AND (#{gradeId} IS NULL OR s.grade_id = #{gradeId}) " +
             "</where>" +
@@ -447,7 +447,7 @@ public interface OlapMapper {
             "FROM fact_score s " +
             "WHERE s.is_absent = 0 " +
             "  AND (#{startSemesterId} IS NULL OR s.semester_id >= #{startSemesterId}) " +
-            "  AND (#{endSemesterId} IS NULL OR s.semester_id <= #{endSemesterId}) " +
+            "  AND (#{endSemesterId} IS NULL OR s.semester_id &lt;= #{endSemesterId}) " +
             "  AND s.class_id = (SELECT ds.class_id FROM dim_student ds WHERE ds.id = #{studentId}) " +
             "  <if test='courseId != null'> AND s.course_id = #{courseId} </if>" +
             "GROUP BY s.student_id " +
@@ -462,7 +462,7 @@ public interface OlapMapper {
             "FROM fact_score s " +
             "WHERE s.is_absent = 0 " +
             "  AND (#{startSemesterId} IS NULL OR s.semester_id >= #{startSemesterId}) " +
-            "  AND (#{endSemesterId} IS NULL OR s.semester_id <= #{endSemesterId}) " +
+            "  AND (#{endSemesterId} IS NULL OR s.semester_id &lt;= #{endSemesterId}) " +
             "  AND s.grade_id = (SELECT ds.grade_id FROM dim_student ds WHERE ds.id = #{studentId}) " +
             "  <if test='courseId != null'> AND s.course_id = #{courseId} </if>" +
             "GROUP BY s.student_id " +

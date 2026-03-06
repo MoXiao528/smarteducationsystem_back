@@ -8,4 +8,5 @@ public class SysMetricConfig {
     private Double passScore;
     private Double excellentScore;
     private String scoreBins;
+    private Boolean maintenanceMode;
 }

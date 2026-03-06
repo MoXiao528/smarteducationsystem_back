@@ -23,7 +23,7 @@ public interface ProfileMapper {
             "WHERE s.id = #{studentId}")
     ProfileDto.StudentProfile getStudentProfile(@Param("studentId") Integer studentId);
 
-    @Select("SELECT t.name, t.title FROM dim_teacher t WHERE t.id = #{teacherId}")
+    @Select("SELECT t.name, t.title, t.teaching_years as teachingYears FROM dim_teacher t WHERE t.id = #{teacherId}")
     ProfileDto.TeacherProfile getTeacherProfile(@Param("teacherId") Integer teacherId);
 
     @Select("SELECT DISTINCT c.name " +
@@ -62,12 +62,16 @@ public interface ProfileMapper {
             @Param("studentKey") String studentKey);
 
     @Select("<script>" +
-            "SELECT t.id, t.name, t.title, c.name as collegeName " +
+            "SELECT t.id, CAST(t.id AS CHAR) as teacherNo, t.name, t.title, c.name as collegeName, t.teaching_years as teachingYears " +
             "FROM dim_teacher t " +
             "LEFT JOIN dim_college c ON t.college_id = c.id " +
             "<where> " +
             "   <if test='collegeId != null'> AND t.college_id = #{collegeId} </if>" +
+            "   <if test='teacherKey != null and teacherKey != \"\"'> AND (t.name LIKE CONCAT('%', #{teacherKey}, '%') OR CAST(t.id AS CHAR) LIKE CONCAT('%', #{teacherKey}, '%')) </if>" +
             "</where>" +
+            " ORDER BY t.id" +
             "</script>")
-    List<ProfileDto.TeacherProfile> getTeacherList(@Param("collegeId") Integer collegeId);
+    List<ProfileDto.TeacherProfile> getTeacherList(
+            @Param("collegeId") Integer collegeId,
+            @Param("teacherKey") String teacherKey);
 }
